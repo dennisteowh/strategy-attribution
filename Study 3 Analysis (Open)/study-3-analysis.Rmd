@@ -1,0 +1,2338 @@
+---
+title: "Study 3 Analysis"
+author: "Dennis Teo"
+output:   
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    theme: united
+---
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+
+```
+
+```{r}
+
+library(readr)
+
+attobo3 <- read_csv("attobo3_clean.csv")
+
+source('Useful Code V2.R', echo=FALSE)
+
+library(ggplot2)
+library(tidyverse)
+
+library(R2jags)
+library(rjags)
+library(runjags)
+library("lattice")
+library("superdiag")
+
+library(gtools)
+library(MCMCvis)
+
+library(BayesFactor)
+library(bayestestR)
+
+# diff is strat - effort
+
+```
+
+
+# Descriptive Stats
+
+```{r }
+
+attobo3.advice <- attobo3 %>%
+  select(StratAcad, EffortAcad, StratSports, EffortSports,
+         StratParent, EffortParent, StratDiet, EffortDiet,
+         StratTeam, EffortTeam, StratSales, EffortSales,
+         StratRelation, EffortRelation, Order)
+
+attobo3.attribution <- attobo3 %>%
+  select(Effort.Locus.External, Strat.Locus.External,
+         Effort.Variable, Strat.Variable,
+         Effort.Others.Uncon, Strat.Others.Uncon,
+         Effort.Personal.Uncon, Strat.Personal.Uncon)
+
+summary(attobo3.attribution)
+
+attobo3.demo <- attobo3 %>%
+  select(Gender, Race, Age, Education)
+
+summary(attobo3.demo)
+
+ggplot(data = gather(attobo3.advice, factor_key = TRUE), aes(x = factor(value))) +
+  geom_bar() + 
+  facet_wrap(~ key,scales = "free", as.table = TRUE, nrow = 3) + xlab("") + 
+  theme_bw()
+
+ggplot(data = gather(attobo3.attribution, factor_key = TRUE), aes(x = factor(value))) +
+  geom_bar() + 
+  facet_wrap(~ key,scales = "free", as.table = TRUE, nrow = 3) + xlab("") + 
+  theme_bw()
+
+ggplot(data = gather(attobo3.demo, factor_key = TRUE), aes(x = factor(value))) +
+  geom_bar() + 
+  facet_wrap(~ key,scales = "free", as.table = TRUE, nrow = 3) + xlab("") + 
+  theme_bw()
+
+
+```
+
+# Academic Scenario Analysis
+
+## Preparing Data
+
+```{r}
+
+attobo3$StratAcad <- factor(attobo3$StratAcad, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$StratAcad <- as.numeric(attobo3$StratAcad)
+
+attobo3$EffortAcad <- factor(attobo3$EffortAcad, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$EffortAcad <- as.numeric(attobo3$EffortAcad)
+
+EffortAcad <- attobo3$EffortAcad
+            
+StratAcad <- attobo3$StratAcad
+
+choices <- c(EffortAcad, StratAcad)
+
+condition <- c(rep(0, length(EffortAcad)), rep(1, length(StratAcad)))
+
+N <- length(choices)
+
+px <- c(1:length(EffortAcad),1:length(StratAcad))
+
+attobo3.datjags <- list(choices = choices, condition = condition, N = N, J = 4)
+attobo3.datjags
+
+```
+
+## Writing Model
+
+```{r}
+
+attobo3.model <- function() { 
+  for (i in 1:N) {
+    
+    choices[i] ~ dcat(p[i, 1:J])
+    
+    for (j in 1:J) {
+      
+      p[i, j] <- q[i, j]/sum(q[i, 1:J])
+      #q[i, j] is exp(XB)
+      # probability of px i picking option j
+      
+      log(q[i, j]) <- b[j] + c[j]*condition[i] 
+      # decomposed into effect of condition + participant variance
+      
+      }
+      
+    }
+
+  b[1] <- 0
+  c[1] <- 0
+
+  # priors
+    for(j in 2:J) {
+     b[j] ~ dnorm(0,0.01)
+     c[j] ~ dnorm(0,0.01)
+     
+    }
+  
+  
+  
+}
+```
+
+## Parameters to monitor
+
+```{r}
+
+params <- c( "p", "b", "c")
+
+```
+
+## Initial Starting Values
+
+```{r}
+
+inits1 <- list("b" = c(NA, rep(0,3)), 
+               "c" = c(NA, rep(0,3))
+)
+
+inits2 <- list("b" = c(NA, rep(2,3)), 
+               "c" =c(NA, rep(2,3))
+)
+
+
+inits3 <- list("b" = c(NA, rep(3,3)), 
+               "c" = c(NA, rep(3,3))
+)
+
+
+attobo3.inits <- list(inits1, inits2, inits3)
+
+#attobo3.inits
+
+
+```
+
+
+## Fitting model
+
+```{r eval=FALSE}
+set.seed(21082019)
+
+attobo3.fit <- jags(data = attobo3.datjags, inits = attobo3.inits, parameters.to.save = params,
+                    n.chains = 3, n.iter = 200000, n.burnin = 50000,
+                    model.file = attobo3.model, n.thin = 10)
+
+attobo3.fit.upd <- update(attobo3.fit, n.iter =1000)
+attobo3.fit.upd <- autojags(attobo3.fit)
+```
+
+## Summarizing Model
+
+```{r eval = FALSE}
+
+attobo3.mcmc <- as.mcmc(attobo3.fit)
+
+#save(attobo3.mcmc, file = "attobo3.acad.mcmc.RData")
+ 
+#summary(attobo3.mcmc)
+
+```
+
+## Checking Model Convergence
+
+```{r eval = FALSE}
+
+MCMCtrace(attobo3.mcmc[,1:9], ind = TRUE, pdf = FALSE  )
+
+autocorr.plot(attobo3.mcmc[1][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[2][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[3][,1:9], ask = FALSE)
+```
+
+```{r}
+
+attobo3.out <- as.data.frame(as.matrix(attobo3.mcmc))
+
+```
+
+## Preparing Results for Reporting
+
+```{r}
+
+pred.p <- attobo3.out[, grep("p[", colnames(attobo3.out), fixed = T)]
+
+## estimated probability for each participan
+pred.p <- attobo3.out[, c(mixedsort(names(pred.p)))]
+
+pred.effort <- pred.p[, 1:1200]
+
+## estimated probability for each participant and each response category
+pred.effort.default <- pred.effort[, grep(",1]", colnames(pred.effort), fixed = T)]
+
+pred.effort.brute <- pred.effort[, grep(",2]", colnames(pred.effort), fixed = T)]
+
+pred.effort.method <- pred.effort[, grep(",3]", colnames(pred.effort), fixed = T)]
+
+pred.effort.giveup <- pred.effort[, grep(",4]", colnames(pred.effort), fixed = T)]
+
+
+pred.strat <- pred.p[, 1201:2400]
+
+## estimated probability for each participant and each response category
+pred.strat.default <- pred.strat[, grep(",1]", colnames(pred.strat), fixed = T)]
+
+pred.strat.brute <- pred.strat[, grep(",2]", colnames(pred.strat), fixed = T)]
+
+pred.strat.method <- pred.strat[, grep(",3]", colnames(pred.strat), fixed = T)]
+
+pred.strat.giveup <- pred.strat[, grep(",4]", colnames(pred.strat), fixed = T)]
+
+
+
+## means probability for each category
+
+pred.effort.default$mean <- apply(pred.effort.default, 1, mean)
+
+q <- quantile(pred.effort.default$mean, probs = c(.025, .5, .975))
+
+effort.default <- round(c(mean(pred.effort.default$mean), sd(pred.effort.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.default
+
+pred.effort.brute$mean <- apply(pred.effort.brute, 1, mean)
+
+q <- quantile(pred.effort.brute$mean, probs = c(.025, .5, .975))
+
+effort.brute <- round(c(mean(pred.effort.brute$mean), sd(pred.effort.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.brute
+
+pred.effort.method$mean <- apply(pred.effort.method, 1, mean)
+
+q <- quantile(pred.effort.method$mean, probs = c(.025, .5, .975))
+
+effort.method <- round(c(mean(pred.effort.method$mean), sd(pred.effort.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.method
+
+pred.effort.giveup$mean <- apply(pred.effort.giveup, 1, mean)
+
+q <- quantile(pred.effort.giveup$mean, probs = c(.025, .5, .975))
+
+effort.giveup <- round(c(mean(pred.effort.giveup$mean), sd(pred.effort.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.giveup
+
+## strat
+
+pred.strat.default$mean <- apply(pred.strat.default, 1, mean)
+
+q <- quantile(pred.strat.default$mean, probs = c(.025, .5, .975))
+
+strat.default <- round(c(mean(pred.strat.default$mean), sd(pred.strat.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.default
+
+pred.strat.brute$mean <- apply(pred.strat.brute, 1, mean)
+
+q <- quantile(pred.strat.brute$mean, probs = c(.025, .5, .975))
+
+strat.brute <- round(c(mean(pred.strat.brute$mean), sd(pred.strat.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.brute
+
+pred.strat.method$mean <- apply(pred.strat.method, 1, mean)
+
+q <- quantile(pred.strat.method$mean, probs = c(.025, .5, .975))
+
+strat.method <- round(c(mean(pred.strat.method$mean), sd(pred.strat.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.method
+
+pred.strat.giveup$mean <- apply(pred.strat.giveup, 1, mean)
+
+q <- quantile(pred.strat.giveup$mean, probs = c(.025, .5, .975))
+
+strat.giveup <- round(c(mean(pred.strat.giveup$mean), sd(pred.strat.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.giveup
+
+
+```
+
+```{r}
+
+acad.posteriors <- list(acad.strat.default = strat.default,
+                        acad.strat.brute = strat.brute,
+                        acad.strat.method = strat.method,
+                        acad.strat.giveup = strat.giveup,
+                        acad.effort.default = effort.default,
+                        acad.effort.brute =effort.brute,
+                        acad.effort.method = effort.method,
+                        acad.effort.giveup = effort.giveup
+                        )
+
+acad.posteriors
+
+```
+
+
+
+## Presenting Results Graphically
+
+### Predicted Probability for each Advice Type
+
+```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+attobo3.posterior.coefs <- data.frame(pred.effort.default[, "mean"], pred.strat.default[, "mean"], 
+                                 pred.effort.brute[, "mean"], pred.strat.brute[, "mean"],
+                                 pred.effort.method[, "mean"], pred.strat.method[, "mean"],
+                                 pred.effort.giveup[, "mean"], pred.strat.giveup[, "mean"])
+
+names(attobo3.posterior.coefs) <- c("Effort Default","Strategy Default", "Effort Bruteforce","Strategy Bruteforce",     "Effort Method","Strategy Method", "Effort Give Up","Strategy Give Up")
+
+attobo3.posterior.coefs.long <- gather(attobo3.posterior.coefs)
+
+attobo3.posterior.coefs.long$key <- factor(attobo3.posterior.coefs.long$key, levels = c("Effort Default", "Strategy Default", "Effort Bruteforce","Strategy Bruteforce", "Effort Method", "Strategy Method", "Effort Give Up",
+                                      "Strategy Give Up"))
+
+
+```
+
+```{r}
+library("ggridges")
+ggplot(data = attobo3.posterior.coefs.long, aes(x = value, y = key)) + 
+  stat_density_ridges(quantile_lines = TRUE, 
+                      quantiles = c(0.025, 0.5, 0.975), 
+                      alpha = 0.7)
+```
+
+```{r}
+attobo3.posterior.coefs.sum <- summarize(group_by(attobo3.posterior.coefs.long, key),
+                                        mean_coef = mean(value),
+                                        lower_coef = quantile(value, probs = c(0.025)),
+                                        upper_coef = quantile(value, probs = c(0.975)))
+
+acad.summary <- attobo3.posterior.coefs.sum
+
+#save(acad.summary, file = "acad.summary.RData")
+
+```
+
+
+
+############################################################
+
+
+
+# Sports Scenario Analysis
+
+## Preparing Data
+
+```{r}
+
+attobo3$StratSports <- factor(attobo3$StratSports, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$StratSports <- as.numeric(attobo3$StratSports)
+
+attobo3$EffortSports <- factor(attobo3$EffortSports, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$EffortSports <- as.numeric(attobo3$EffortSports)
+
+EffortSports <- attobo3$EffortSports
+            
+StratSports <- attobo3$StratSports
+
+choices <- c(EffortSports, StratSports)
+
+condition <- c(rep(0, length(EffortSports)), rep(1, length(StratSports)))
+
+N <- length(choices)
+
+attobo3.datjags <- list(choices = choices, condition = condition, N = N, J = 4)
+attobo3.datjags
+
+```
+
+## Writing Model
+
+```{r}
+
+attobo3.model <- function() { 
+  for (i in 1:N) {
+    
+    choices[i] ~ dcat(p[i, 1:J])
+    
+    for (j in 1:J) {
+      
+      p[i, j] <- q[i, j]/sum(q[i, 1:J])
+      #q[i, j] is exp(XB)
+      # probability of px i picking option j
+      
+      log(q[i, j]) <- b[j] + c[j]*condition[i] 
+      # decomposed into effect of condition + participant variance
+      
+      }
+      
+    }
+
+  b[1] <- 0
+  c[1] <- 0
+
+  # priors
+    for(j in 2:J) {
+     b[j] ~ dnorm(0,0.01)
+     c[j] ~ dnorm(0,0.01)
+     
+    }
+  
+  
+  
+}
+```
+
+## Parameters to monitor
+
+```{r}
+
+params <- c( "p", "b", "c")
+
+```
+
+## Initial Starting Values
+
+```{r}
+
+inits1 <- list("b" = c(NA, rep(0,3)), 
+               "c" = c(NA, rep(0,3))
+)
+
+inits2 <- list("b" = c(NA, rep(2,3)), 
+               "c" =c(NA, rep(2,3))
+)
+
+
+inits3 <- list("b" = c(NA, rep(3,3)), 
+               "c" = c(NA, rep(3,3))
+)
+
+
+attobo3.inits <- list(inits1, inits2, inits3)
+
+#attobo3.inits
+
+
+```
+
+
+## Fitting model
+
+```{r eval=FALSE}
+set.seed(21082019)
+
+attobo3.fit <- jags(data = attobo3.datjags, inits = attobo3.inits, parameters.to.save = params,
+                    n.chains = 3, n.iter = 200000, n.burnin = 50000,
+                    model.file = attobo3.model, n.thin = 10)
+
+attobo3.fit.upd <- update(attobo3.fit, n.iter =1000)
+attobo3.fit.upd <- autojags(attobo3.fit)
+```
+
+## Summarizing Model
+
+```{r eval = FALSE}
+
+attobo3.mcmc <- as.mcmc(attobo3.fit)
+
+#save(attobo3.mcmc, file = "attobo3.sports.mcmc.RData")
+
+ 
+#summary(attobo3.mcmc)
+
+```
+
+## Checking Model Convergence
+
+```{r eval = FALSE}
+
+MCMCtrace(attobo3.mcmc[,1:9], ind = TRUE, pdf = FALSE  )
+
+autocorr.plot(attobo3.mcmc[1][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[2][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[3][,1:9], ask = FALSE)
+```
+
+```{r}
+
+attobo3.out <- as.data.frame(as.matrix(attobo3.mcmc))
+
+```
+
+## Preparing Results for Reporting
+
+```{r}
+
+pred.p <- attobo3.out[, grep("p[", colnames(attobo3.out), fixed = T)]
+
+## estimated probability for each participan
+pred.p <- attobo3.out[, c(mixedsort(names(pred.p)))]
+
+pred.effort <- pred.p[, 1:1200]
+
+## estimated probability for each participant and each response category
+pred.effort.default <- pred.effort[, grep(",1]", colnames(pred.effort), fixed = T)]
+
+pred.effort.brute <- pred.effort[, grep(",2]", colnames(pred.effort), fixed = T)]
+
+pred.effort.method <- pred.effort[, grep(",3]", colnames(pred.effort), fixed = T)]
+
+pred.effort.giveup <- pred.effort[, grep(",4]", colnames(pred.effort), fixed = T)]
+
+
+pred.strat <- pred.p[, 1201:2400]
+
+## estimated probability for each participant and each response category
+pred.strat.default <- pred.strat[, grep(",1]", colnames(pred.strat), fixed = T)]
+
+pred.strat.brute <- pred.strat[, grep(",2]", colnames(pred.strat), fixed = T)]
+
+pred.strat.method <- pred.strat[, grep(",3]", colnames(pred.strat), fixed = T)]
+
+pred.strat.giveup <- pred.strat[, grep(",4]", colnames(pred.strat), fixed = T)]
+
+
+
+## means probability for each category
+
+pred.effort.default$mean <- apply(pred.effort.default, 1, mean)
+
+q <- quantile(pred.effort.default$mean, probs = c(.025, .5, .975))
+
+effort.default <- round(c(mean(pred.effort.default$mean), sd(pred.effort.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.default
+
+pred.effort.brute$mean <- apply(pred.effort.brute, 1, mean)
+
+q <- quantile(pred.effort.brute$mean, probs = c(.025, .5, .975))
+
+effort.brute <- round(c(mean(pred.effort.brute$mean), sd(pred.effort.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.brute
+
+pred.effort.method$mean <- apply(pred.effort.method, 1, mean)
+
+q <- quantile(pred.effort.method$mean, probs = c(.025, .5, .975))
+
+effort.method <- round(c(mean(pred.effort.method$mean), sd(pred.effort.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.method
+
+pred.effort.giveup$mean <- apply(pred.effort.giveup, 1, mean)
+
+q <- quantile(pred.effort.giveup$mean, probs = c(.025, .5, .975))
+
+effort.giveup <- round(c(mean(pred.effort.giveup$mean), sd(pred.effort.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.giveup
+
+## strat
+
+pred.strat.default$mean <- apply(pred.strat.default, 1, mean)
+
+q <- quantile(pred.strat.default$mean, probs = c(.025, .5, .975))
+
+strat.default <- round(c(mean(pred.strat.default$mean), sd(pred.strat.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.default
+
+pred.strat.brute$mean <- apply(pred.strat.brute, 1, mean)
+
+q <- quantile(pred.strat.brute$mean, probs = c(.025, .5, .975))
+
+strat.brute <- round(c(mean(pred.strat.brute$mean), sd(pred.strat.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.brute
+
+pred.strat.method$mean <- apply(pred.strat.method, 1, mean)
+
+q <- quantile(pred.strat.method$mean, probs = c(.025, .5, .975))
+
+strat.method <- round(c(mean(pred.strat.method$mean), sd(pred.strat.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.method
+
+pred.strat.giveup$mean <- apply(pred.strat.giveup, 1, mean)
+
+q <- quantile(pred.strat.giveup$mean, probs = c(.025, .5, .975))
+
+strat.giveup <- round(c(mean(pred.strat.giveup$mean), sd(pred.strat.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.giveup
+
+
+```
+
+```{r}
+
+sports.posteriors <- list(sports.strat.default = strat.default,
+                        sports.strat.brute = strat.brute,
+                        sports.strat.method = strat.method,
+                        sports.strat.giveup = strat.giveup,
+                        sports.effort.default = effort.default,
+                        sports.effort.brute =effort.brute,
+                        sports.effort.method = effort.method,
+                        sports.effort.giveup = effort.giveup
+                        )
+
+sports.posteriors
+
+```
+
+## Presenting Results Graphically
+
+### Predicted Probability for each Advice Type
+
+```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+attobo3.posterior.coefs <- data.frame(pred.effort.default[, "mean"], pred.strat.default[, "mean"], 
+                                 pred.effort.brute[, "mean"], pred.strat.brute[, "mean"],
+                                 pred.effort.method[, "mean"], pred.strat.method[, "mean"],
+                                 pred.effort.giveup[, "mean"], pred.strat.giveup[, "mean"])
+
+names(attobo3.posterior.coefs) <- c("Effort Default","Strategy Default", "Effort Bruteforce","Strategy Bruteforce",     "Effort Method","Strategy Method", "Effort Give Up","Strategy Give Up")
+
+attobo3.posterior.coefs.long <- gather(attobo3.posterior.coefs)
+
+attobo3.posterior.coefs.long$key <- factor(attobo3.posterior.coefs.long$key, levels = c("Effort Default", "Strategy Default", "Effort Bruteforce","Strategy Bruteforce", "Effort Method", "Strategy Method", "Effort Give Up",
+                                      "Strategy Give Up"))
+
+
+```
+
+```{r}
+library("ggridges")
+ggplot(data = attobo3.posterior.coefs.long, aes(x = value, y = key)) + 
+  stat_density_ridges(quantile_lines = TRUE, 
+                      quantiles = c(0.025, 0.5, 0.975), 
+                      alpha = 0.7)
+```
+
+```{r}
+attobo3.posterior.coefs.sum <- summarize(group_by(attobo3.posterior.coefs.long, key),
+                                        mean_coef = mean(value),
+                                        lower_coef = quantile(value, probs = c(0.025)),
+                                        upper_coef = quantile(value, probs = c(0.975)))
+
+sports.summary <- attobo3.posterior.coefs.sum
+
+#save(sports.summary, file = "sports.summary.RData")
+
+```
+
+
+
+############################################################
+
+
+
+# Parent Scenario Analysis
+
+## Preparing Data
+
+```{r}
+
+attobo3$StratParent <- factor(attobo3$StratParent, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$StratParent <- as.numeric(attobo3$StratParent)
+
+attobo3$EffortParent <- factor(attobo3$EffortParent, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$EffortParent <- as.numeric(attobo3$EffortParent)
+
+EffortParent <- attobo3$EffortParent
+            
+StratParent <- attobo3$StratParent
+
+choices <- c(EffortParent, StratParent)
+
+condition <- c(rep(0, length(EffortParent)), rep(1, length(StratParent)))
+
+N <- length(choices)
+
+attobo3.datjags <- list(choices = choices, condition = condition, N = N, J = 4)
+attobo3.datjags
+
+```
+
+## Writing Model
+
+```{r}
+
+attobo3.model <- function() { 
+  for (i in 1:N) {
+    
+    choices[i] ~ dcat(p[i, 1:J])
+    
+    for (j in 1:J) {
+      
+      p[i, j] <- q[i, j]/sum(q[i, 1:J])
+      #q[i, j] is exp(XB)
+      # probability of px i picking option j
+      
+      log(q[i, j]) <- b[j] + c[j]*condition[i] 
+      # decomposed into effect of condition + participant variance
+      
+      }
+      
+    }
+
+  b[1] <- 0
+  c[1] <- 0
+
+  # priors
+    for(j in 2:J) {
+     b[j] ~ dnorm(0,0.01)
+     c[j] ~ dnorm(0,0.01)
+     
+    }
+  
+  
+  
+}
+```
+
+## Parameters to monitor
+
+```{r}
+
+params <- c( "p", "b", "c")
+
+```
+
+## Initial Starting Values
+
+```{r}
+
+inits1 <- list("b" = c(NA, rep(0,3)), 
+               "c" = c(NA, rep(0,3))
+)
+
+inits2 <- list("b" = c(NA, rep(2,3)), 
+               "c" =c(NA, rep(2,3))
+)
+
+
+inits3 <- list("b" = c(NA, rep(3,3)), 
+               "c" = c(NA, rep(3,3))
+)
+
+
+attobo3.inits <- list(inits1, inits2, inits3)
+
+#attobo3.inits
+
+
+```
+
+
+## Fitting model
+
+```{r eval=FALSE}
+set.seed(21082019)
+
+attobo3.fit <- jags(data = attobo3.datjags, inits = attobo3.inits, parameters.to.save = params,
+                    n.chains = 3, n.iter = 100000, n.burnin = 40000,
+                    model.file = attobo3.model, n.thin = 10)
+
+attobo3.fit.upd <- update(attobo3.fit, n.iter =1000)
+attobo3.fit.upd <- autojags(attobo3.fit)
+```
+
+## Summarizing Model
+
+```{r eval = FALSE}
+
+attobo3.mcmc <- as.mcmc(attobo3.fit)
+
+#save(attobo3.mcmc, file = "attobo3.parent.mcmc.RData")
+
+ 
+#summary(attobo3.mcmc)
+
+```
+
+## Checking Model Convergence
+
+```{r eval = FALSE}
+
+MCMCtrace(attobo3.mcmc[,1:9], ind = TRUE, pdf = FALSE  )
+
+autocorr.plot(attobo3.mcmc[1][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[2][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[3][,1:9], ask = FALSE)
+```
+
+```{r}
+
+attobo3.out <- as.data.frame(as.matrix(attobo3.mcmc))
+
+```
+
+## Preparing Results for Reporting
+
+```{r}
+
+pred.p <- attobo3.out[, grep("p[", colnames(attobo3.out), fixed = T)]
+
+## estimated probability for each participan
+pred.p <- attobo3.out[, c(mixedsort(names(pred.p)))]
+
+pred.effort <- pred.p[, 1:1200]
+
+## estimated probability for each participant and each response category
+pred.effort.default <- pred.effort[, grep(",1]", colnames(pred.effort), fixed = T)]
+
+pred.effort.brute <- pred.effort[, grep(",2]", colnames(pred.effort), fixed = T)]
+
+pred.effort.method <- pred.effort[, grep(",3]", colnames(pred.effort), fixed = T)]
+
+pred.effort.giveup <- pred.effort[, grep(",4]", colnames(pred.effort), fixed = T)]
+
+
+pred.strat <- pred.p[, 1201:2400]
+
+## estimated probability for each participant and each response category
+pred.strat.default <- pred.strat[, grep(",1]", colnames(pred.strat), fixed = T)]
+
+pred.strat.brute <- pred.strat[, grep(",2]", colnames(pred.strat), fixed = T)]
+
+pred.strat.method <- pred.strat[, grep(",3]", colnames(pred.strat), fixed = T)]
+
+pred.strat.giveup <- pred.strat[, grep(",4]", colnames(pred.strat), fixed = T)]
+
+
+
+## means probability for each category
+
+pred.effort.default$mean <- apply(pred.effort.default, 1, mean)
+
+q <- quantile(pred.effort.default$mean, probs = c(.025, .5, .975))
+
+effort.default <- round(c(mean(pred.effort.default$mean), sd(pred.effort.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.default
+
+pred.effort.brute$mean <- apply(pred.effort.brute, 1, mean)
+
+q <- quantile(pred.effort.brute$mean, probs = c(.025, .5, .975))
+
+effort.brute <- round(c(mean(pred.effort.brute$mean), sd(pred.effort.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.brute
+
+pred.effort.method$mean <- apply(pred.effort.method, 1, mean)
+
+q <- quantile(pred.effort.method$mean, probs = c(.025, .5, .975))
+
+effort.method <- round(c(mean(pred.effort.method$mean), sd(pred.effort.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.method
+
+pred.effort.giveup$mean <- apply(pred.effort.giveup, 1, mean)
+
+q <- quantile(pred.effort.giveup$mean, probs = c(.025, .5, .975))
+
+effort.giveup <- round(c(mean(pred.effort.giveup$mean), sd(pred.effort.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.giveup
+
+## strat
+
+pred.strat.default$mean <- apply(pred.strat.default, 1, mean)
+
+q <- quantile(pred.strat.default$mean, probs = c(.025, .5, .975))
+
+strat.default <- round(c(mean(pred.strat.default$mean), sd(pred.strat.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.default
+
+pred.strat.brute$mean <- apply(pred.strat.brute, 1, mean)
+
+q <- quantile(pred.strat.brute$mean, probs = c(.025, .5, .975))
+
+strat.brute <- round(c(mean(pred.strat.brute$mean), sd(pred.strat.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.brute
+
+pred.strat.method$mean <- apply(pred.strat.method, 1, mean)
+
+q <- quantile(pred.strat.method$mean, probs = c(.025, .5, .975))
+
+strat.method <- round(c(mean(pred.strat.method$mean), sd(pred.strat.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.method
+
+pred.strat.giveup$mean <- apply(pred.strat.giveup, 1, mean)
+
+q <- quantile(pred.strat.giveup$mean, probs = c(.025, .5, .975))
+
+strat.giveup <- round(c(mean(pred.strat.giveup$mean), sd(pred.strat.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.giveup
+
+
+```
+
+```{r}
+
+parent.posteriors <- list(parent.strat.default = strat.default,
+                        parent.strat.brute = strat.brute,
+                        parent.strat.method = strat.method,
+                        parent.strat.giveup = strat.giveup,
+                        parent.effort.default = effort.default,
+                        parent.effort.brute =effort.brute,
+                        parent.effort.method = effort.method,
+                        parent.effort.giveup = effort.giveup
+                        )
+
+parent.posteriors
+
+```
+
+## Presenting Results Graphically
+
+### Predicted Probability for each Advice Type
+
+```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+attobo3.posterior.coefs <- data.frame(pred.effort.default[, "mean"], pred.strat.default[, "mean"], 
+                                 pred.effort.brute[, "mean"], pred.strat.brute[, "mean"],
+                                 pred.effort.method[, "mean"], pred.strat.method[, "mean"],
+                                 pred.effort.giveup[, "mean"], pred.strat.giveup[, "mean"])
+
+names(attobo3.posterior.coefs) <- c("Effort Default","Strategy Default", "Effort Bruteforce","Strategy Bruteforce",     "Effort Method","Strategy Method", "Effort Give Up","Strategy Give Up")
+
+attobo3.posterior.coefs.long <- gather(attobo3.posterior.coefs)
+
+attobo3.posterior.coefs.long$key <- factor(attobo3.posterior.coefs.long$key, levels = c("Effort Default", "Strategy Default", "Effort Bruteforce","Strategy Bruteforce", "Effort Method", "Strategy Method", "Effort Give Up",
+                                      "Strategy Give Up"))
+
+
+```
+
+```{r}
+library("ggridges")
+ggplot(data = attobo3.posterior.coefs.long, aes(x = value, y = key)) + 
+  stat_density_ridges(quantile_lines = TRUE, 
+                      quantiles = c(0.025, 0.5, 0.975), 
+                      alpha = 0.7)
+```
+
+```{r}
+attobo3.posterior.coefs.sum <- summarize(group_by(attobo3.posterior.coefs.long, key),
+                                        mean_coef = mean(value),
+                                        lower_coef = quantile(value, probs = c(0.025)),
+                                        upper_coef = quantile(value, probs = c(0.975)))
+
+parent.summary <- attobo3.posterior.coefs.sum
+
+#save(parent.summary, file = "parent.summary.RData")
+
+```
+
+
+
+############################################################
+
+
+
+
+# Diet Scenario Analysis
+
+## Preparing Data
+
+```{r}
+
+attobo3$StratDiet <- factor(attobo3$StratDiet, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$StratDiet <- as.numeric(attobo3$StratDiet)
+
+attobo3$EffortDiet <- factor(attobo3$EffortDiet, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$EffortDiet <- as.numeric(attobo3$EffortDiet)
+
+EffortDiet <- attobo3$EffortDiet
+            
+StratDiet <- attobo3$StratDiet
+
+choices <- c(EffortDiet, StratDiet)
+
+condition <- c(rep(0, length(EffortDiet)), rep(1, length(StratDiet)))
+
+N <- length(choices)
+
+attobo3.datjags <- list(choices = choices, condition = condition, N = N, J = 4)
+attobo3.datjags
+
+```
+
+## Writing Model
+
+```{r}
+
+attobo3.model <- function() { 
+  for (i in 1:N) {
+    
+    choices[i] ~ dcat(p[i, 1:J])
+    
+    for (j in 1:J) {
+      
+      p[i, j] <- q[i, j]/sum(q[i, 1:J])
+      #q[i, j] is exp(XB)
+      # probability of px i picking option j
+      
+      log(q[i, j]) <- b[j] + c[j]*condition[i] 
+      # decomposed into effect of condition + participant variance
+      
+      }
+      
+    }
+
+  b[1] <- 0
+  c[1] <- 0
+
+  # priors
+    for(j in 2:J) {
+     b[j] ~ dnorm(0,0.01)
+     c[j] ~ dnorm(0,0.01)
+     
+    }
+  
+  
+  
+}
+```
+
+## Parameters to monitor
+
+```{r}
+
+params <- c( "p", "b", "c")
+
+```
+
+## Initial Starting Values
+
+```{r}
+
+inits1 <- list("b" = c(NA, rep(0,3)), 
+               "c" = c(NA, rep(0,3))
+)
+
+inits2 <- list("b" = c(NA, rep(2,3)), 
+               "c" =c(NA, rep(2,3))
+)
+
+
+inits3 <- list("b" = c(NA, rep(3,3)), 
+               "c" = c(NA, rep(3,3))
+)
+
+
+attobo3.inits <- list(inits1, inits2, inits3)
+
+#attobo3.inits
+
+
+```
+
+
+## Fitting model
+
+```{r eval=FALSE}
+set.seed(21082019)
+
+attobo3.fit <- jags(data = attobo3.datjags, inits = attobo3.inits, parameters.to.save = params,
+                    n.chains = 3, n.iter = 100000, n.burnin = 40000,
+                    model.file = attobo3.model, n.thin = 10)
+
+attobo3.fit.upd <- update(attobo3.fit, n.iter =1000)
+attobo3.fit.upd <- autojags(attobo3.fit)
+```
+
+## Summarizing Model
+
+```{r eval = FALSE}
+
+attobo3.mcmc <- as.mcmc(attobo3.fit)
+
+#save(attobo3.mcmc, file = "attobo3.diet.mcmc.RData")
+
+
+ 
+#summary(attobo3.mcmc)
+
+```
+
+## Checking Model Convergence
+
+```{r eval = FALSE}
+
+MCMCtrace(attobo3.mcmc[,1:9], ind = TRUE, pdf = FALSE  )
+
+autocorr.plot(attobo3.mcmc[1][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[2][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[3][,1:9], ask = FALSE)
+```
+
+```{r}
+
+attobo3.out <- as.data.frame(as.matrix(attobo3.mcmc))
+
+```
+
+## Preparing Results for Reporting
+
+```{r}
+
+pred.p <- attobo3.out[, grep("p[", colnames(attobo3.out), fixed = T)]
+
+## estimated probability for each participan
+pred.p <- attobo3.out[, c(mixedsort(names(pred.p)))]
+
+pred.effort <- pred.p[, 1:1200]
+
+## estimated probability for each participant and each response category
+pred.effort.default <- pred.effort[, grep(",1]", colnames(pred.effort), fixed = T)]
+
+pred.effort.brute <- pred.effort[, grep(",2]", colnames(pred.effort), fixed = T)]
+
+pred.effort.method <- pred.effort[, grep(",3]", colnames(pred.effort), fixed = T)]
+
+pred.effort.giveup <- pred.effort[, grep(",4]", colnames(pred.effort), fixed = T)]
+
+
+pred.strat <- pred.p[, 1201:2400]
+
+## estimated probability for each participant and each response category
+pred.strat.default <- pred.strat[, grep(",1]", colnames(pred.strat), fixed = T)]
+
+pred.strat.brute <- pred.strat[, grep(",2]", colnames(pred.strat), fixed = T)]
+
+pred.strat.method <- pred.strat[, grep(",3]", colnames(pred.strat), fixed = T)]
+
+pred.strat.giveup <- pred.strat[, grep(",4]", colnames(pred.strat), fixed = T)]
+
+
+
+## means probability for each category
+
+pred.effort.default$mean <- apply(pred.effort.default, 1, mean)
+
+q <- quantile(pred.effort.default$mean, probs = c(.025, .5, .975))
+
+effort.default <- round(c(mean(pred.effort.default$mean), sd(pred.effort.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.default
+
+pred.effort.brute$mean <- apply(pred.effort.brute, 1, mean)
+
+q <- quantile(pred.effort.brute$mean, probs = c(.025, .5, .975))
+
+effort.brute <- round(c(mean(pred.effort.brute$mean), sd(pred.effort.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.brute
+
+pred.effort.method$mean <- apply(pred.effort.method, 1, mean)
+
+q <- quantile(pred.effort.method$mean, probs = c(.025, .5, .975))
+
+effort.method <- round(c(mean(pred.effort.method$mean), sd(pred.effort.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.method
+
+pred.effort.giveup$mean <- apply(pred.effort.giveup, 1, mean)
+
+q <- quantile(pred.effort.giveup$mean, probs = c(.025, .5, .975))
+
+effort.giveup <- round(c(mean(pred.effort.giveup$mean), sd(pred.effort.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.giveup
+
+## strat
+
+pred.strat.default$mean <- apply(pred.strat.default, 1, mean)
+
+q <- quantile(pred.strat.default$mean, probs = c(.025, .5, .975))
+
+strat.default <- round(c(mean(pred.strat.default$mean), sd(pred.strat.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.default
+
+pred.strat.brute$mean <- apply(pred.strat.brute, 1, mean)
+
+q <- quantile(pred.strat.brute$mean, probs = c(.025, .5, .975))
+
+strat.brute <- round(c(mean(pred.strat.brute$mean), sd(pred.strat.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.brute
+
+pred.strat.method$mean <- apply(pred.strat.method, 1, mean)
+
+q <- quantile(pred.strat.method$mean, probs = c(.025, .5, .975))
+
+strat.method <- round(c(mean(pred.strat.method$mean), sd(pred.strat.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.method
+
+pred.strat.giveup$mean <- apply(pred.strat.giveup, 1, mean)
+
+q <- quantile(pred.strat.giveup$mean, probs = c(.025, .5, .975))
+
+strat.giveup <- round(c(mean(pred.strat.giveup$mean), sd(pred.strat.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.giveup
+
+
+```
+```{r}
+
+diet.posteriors <- list(diet.strat.default = strat.default,
+                        diet.strat.brute = strat.brute,
+                        diet.strat.method = strat.method,
+                        diet.strat.giveup = strat.giveup,
+                        diet.effort.default = effort.default,
+                        diet.effort.brute =effort.brute,
+                        diet.effort.method = effort.method,
+                        diet.effort.giveup = effort.giveup
+                        )
+
+diet.posteriors
+
+```
+
+## Presenting Results Graphically
+
+### Predicted Probability for each Advice Type
+
+```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+attobo3.posterior.coefs <- data.frame(pred.effort.default[, "mean"], pred.strat.default[, "mean"], 
+                                 pred.effort.brute[, "mean"], pred.strat.brute[, "mean"],
+                                 pred.effort.method[, "mean"], pred.strat.method[, "mean"],
+                                 pred.effort.giveup[, "mean"], pred.strat.giveup[, "mean"])
+
+names(attobo3.posterior.coefs) <- c("Effort Default","Strategy Default", "Effort Bruteforce","Strategy Bruteforce",     "Effort Method","Strategy Method", "Effort Give Up","Strategy Give Up")
+
+attobo3.posterior.coefs.long <- gather(attobo3.posterior.coefs)
+
+attobo3.posterior.coefs.long$key <- factor(attobo3.posterior.coefs.long$key, levels = c("Effort Default", "Strategy Default", "Effort Bruteforce","Strategy Bruteforce", "Effort Method", "Strategy Method", "Effort Give Up",
+                                      "Strategy Give Up"))
+
+
+```
+
+```{r}
+library("ggridges")
+ggplot(data = attobo3.posterior.coefs.long, aes(x = value, y = key)) + 
+  stat_density_ridges(quantile_lines = TRUE, 
+                      quantiles = c(0.025, 0.5, 0.975), 
+                      alpha = 0.7)
+```
+
+```{r}
+attobo3.posterior.coefs.sum <- summarize(group_by(attobo3.posterior.coefs.long, key),
+                                        mean_coef = mean(value),
+                                        lower_coef = quantile(value, probs = c(0.025)),
+                                        upper_coef = quantile(value, probs = c(0.975)))
+
+diet.summary <- attobo3.posterior.coefs.sum
+
+#save(diet.summary, file = "diet.summary.RData")
+
+```
+
+
+
+############################################################
+
+
+
+
+# Team Scenario Analysis
+
+## Preparing Data
+
+```{r}
+
+attobo3$StratTeam <- factor(attobo3$StratTeam, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$StratTeam <- as.numeric(attobo3$StratTeam)
+
+attobo3$EffortTeam <- factor(attobo3$EffortTeam, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$EffortTeam <- as.numeric(attobo3$EffortTeam)
+
+EffortTeam <- attobo3$EffortTeam
+            
+StratTeam <- attobo3$StratTeam
+
+choices <- c(EffortTeam, StratTeam)
+
+condition <- c(rep(0, length(EffortTeam)), rep(1, length(StratTeam)))
+
+N <- length(choices)
+
+attobo3.datjags <- list(choices = choices, condition = condition, N = N, J = 4)
+attobo3.datjags
+
+```
+
+## Writing Model
+
+```{r}
+
+attobo3.model <- function() { 
+  for (i in 1:N) {
+    
+    choices[i] ~ dcat(p[i, 1:J])
+    
+    for (j in 1:J) {
+      
+      p[i, j] <- q[i, j]/sum(q[i, 1:J])
+      #q[i, j] is exp(XB)
+      # probability of px i picking option j
+      
+      log(q[i, j]) <- b[j] + c[j]*condition[i] 
+      # decomposed into effect of condition + participant variance
+      
+      }
+      
+    }
+
+  b[1] <- 0
+  c[1] <- 0
+
+  # priors
+    for(j in 2:J) {
+     b[j] ~ dnorm(0,0.01)
+     c[j] ~ dnorm(0,0.01)
+     
+    }
+  
+  
+  
+}
+```
+
+## Parameters to monitor
+
+```{r}
+
+params <- c( "p", "b", "c")
+
+```
+
+## Initial Starting Values
+
+```{r}
+
+inits1 <- list("b" = c(NA, rep(0,3)), 
+               "c" = c(NA, rep(0,3))
+)
+
+inits2 <- list("b" = c(NA, rep(2,3)), 
+               "c" =c(NA, rep(2,3))
+)
+
+
+inits3 <- list("b" = c(NA, rep(3,3)), 
+               "c" = c(NA, rep(3,3))
+)
+
+
+attobo3.inits <- list(inits1, inits2, inits3)
+
+#attobo3.inits
+
+
+```
+
+
+## Fitting model
+
+```{r eval=FALSE}
+set.seed(21082019)
+
+attobo3.fit <- jags(data = attobo3.datjags, inits = attobo3.inits, parameters.to.save = params,
+                    n.chains = 3, n.iter = 100000, n.burnin = 40000,
+                    model.file = attobo3.model, n.thin = 10)
+
+attobo3.fit.upd <- update(attobo3.fit, n.iter =1000)
+attobo3.fit.upd <- autojags(attobo3.fit)
+```
+
+## Summarizing Model
+
+```{r eval = FALSE}
+
+attobo3.mcmc <- as.mcmc(attobo3.fit)
+
+#save(attobo3.mcmc, file = "attobo3.team.mcmc.RData")
+
+ 
+#summary(attobo3.mcmc)
+
+```
+
+## Checking Model Convergence
+
+```{r eval = FALSE}
+
+MCMCtrace(attobo3.mcmc[,1:9], ind = TRUE, pdf = FALSE  )
+
+autocorr.plot(attobo3.mcmc[1][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[2][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[3][,1:9], ask = FALSE)
+```
+
+```{r}
+
+attobo3.out <- as.data.frame(as.matrix(attobo3.mcmc))
+
+```
+
+## Preparing Results for Reporting
+
+```{r}
+
+pred.p <- attobo3.out[, grep("p[", colnames(attobo3.out), fixed = T)]
+
+## estimated probability for each participan
+pred.p <- attobo3.out[, c(mixedsort(names(pred.p)))]
+
+pred.effort <- pred.p[, 1:1200]
+
+## estimated probability for each participant and each response category
+pred.effort.default <- pred.effort[, grep(",1]", colnames(pred.effort), fixed = T)]
+
+pred.effort.brute <- pred.effort[, grep(",2]", colnames(pred.effort), fixed = T)]
+
+pred.effort.method <- pred.effort[, grep(",3]", colnames(pred.effort), fixed = T)]
+
+pred.effort.giveup <- pred.effort[, grep(",4]", colnames(pred.effort), fixed = T)]
+
+
+pred.strat <- pred.p[, 1201:2400]
+
+## estimated probability for each participant and each response category
+pred.strat.default <- pred.strat[, grep(",1]", colnames(pred.strat), fixed = T)]
+
+pred.strat.brute <- pred.strat[, grep(",2]", colnames(pred.strat), fixed = T)]
+
+pred.strat.method <- pred.strat[, grep(",3]", colnames(pred.strat), fixed = T)]
+
+pred.strat.giveup <- pred.strat[, grep(",4]", colnames(pred.strat), fixed = T)]
+
+
+
+## means probability for each category
+
+pred.effort.default$mean <- apply(pred.effort.default, 1, mean)
+
+q <- quantile(pred.effort.default$mean, probs = c(.025, .5, .975))
+
+effort.default <- round(c(mean(pred.effort.default$mean), sd(pred.effort.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.default
+
+pred.effort.brute$mean <- apply(pred.effort.brute, 1, mean)
+
+q <- quantile(pred.effort.brute$mean, probs = c(.025, .5, .975))
+
+effort.brute <- round(c(mean(pred.effort.brute$mean), sd(pred.effort.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.brute
+
+pred.effort.method$mean <- apply(pred.effort.method, 1, mean)
+
+q <- quantile(pred.effort.method$mean, probs = c(.025, .5, .975))
+
+effort.method <- round(c(mean(pred.effort.method$mean), sd(pred.effort.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.method
+
+pred.effort.giveup$mean <- apply(pred.effort.giveup, 1, mean)
+
+q <- quantile(pred.effort.giveup$mean, probs = c(.025, .5, .975))
+
+effort.giveup <- round(c(mean(pred.effort.giveup$mean), sd(pred.effort.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.giveup
+
+## strat
+
+pred.strat.default$mean <- apply(pred.strat.default, 1, mean)
+
+q <- quantile(pred.strat.default$mean, probs = c(.025, .5, .975))
+
+strat.default <- round(c(mean(pred.strat.default$mean), sd(pred.strat.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.default
+
+pred.strat.brute$mean <- apply(pred.strat.brute, 1, mean)
+
+q <- quantile(pred.strat.brute$mean, probs = c(.025, .5, .975))
+
+strat.brute <- round(c(mean(pred.strat.brute$mean), sd(pred.strat.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.brute
+
+pred.strat.method$mean <- apply(pred.strat.method, 1, mean)
+
+q <- quantile(pred.strat.method$mean, probs = c(.025, .5, .975))
+
+strat.method <- round(c(mean(pred.strat.method$mean), sd(pred.strat.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.method
+
+pred.strat.giveup$mean <- apply(pred.strat.giveup, 1, mean)
+
+q <- quantile(pred.strat.giveup$mean, probs = c(.025, .5, .975))
+
+strat.giveup <- round(c(mean(pred.strat.giveup$mean), sd(pred.strat.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.giveup
+
+
+```
+
+```{r}
+
+team.posteriors <- list(team.strat.default = strat.default,
+                        team.strat.brute = strat.brute,
+                        team.strat.method = strat.method,
+                        team.strat.giveup = strat.giveup,
+                        team.effort.default = effort.default,
+                        team.effort.brute =effort.brute,
+                        team.effort.method = effort.method,
+                        team.effort.giveup = effort.giveup
+                        )
+
+team.posteriors
+
+```
+
+
+## Presenting Results Graphically
+
+### Predicted Probability for each Advice Type
+
+```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+attobo3.posterior.coefs <- data.frame(pred.effort.default[, "mean"], pred.strat.default[, "mean"], 
+                                 pred.effort.brute[, "mean"], pred.strat.brute[, "mean"],
+                                 pred.effort.method[, "mean"], pred.strat.method[, "mean"],
+                                 pred.effort.giveup[, "mean"], pred.strat.giveup[, "mean"])
+
+names(attobo3.posterior.coefs) <- c("Effort Default","Strategy Default", "Effort Bruteforce","Strategy Bruteforce",     "Effort Method","Strategy Method", "Effort Give Up","Strategy Give Up")
+
+attobo3.posterior.coefs.long <- gather(attobo3.posterior.coefs)
+
+attobo3.posterior.coefs.long$key <- factor(attobo3.posterior.coefs.long$key, levels = c("Effort Default", "Strategy Default", "Effort Bruteforce","Strategy Bruteforce", "Effort Method", "Strategy Method", "Effort Give Up",
+                                      "Strategy Give Up"))
+
+
+```
+
+```{r}
+library("ggridges")
+ggplot(data = attobo3.posterior.coefs.long, aes(x = value, y = key)) + 
+  stat_density_ridges(quantile_lines = TRUE, 
+                      quantiles = c(0.025, 0.5, 0.975), 
+                      alpha = 0.7)
+```
+
+```{r}
+attobo3.posterior.coefs.sum <- summarize(group_by(attobo3.posterior.coefs.long, key),
+                                        mean_coef = mean(value),
+                                        lower_coef = quantile(value, probs = c(0.025)),
+                                        upper_coef = quantile(value, probs = c(0.975)))
+
+team.summary <- attobo3.posterior.coefs.sum
+
+#save(team.summary, file = "team.summary.RData")
+
+```
+
+
+
+############################################################
+
+
+
+
+# Sales Scenario Analysis
+
+## Preparing Data
+
+```{r}
+
+attobo3$StratSales <- factor(attobo3$StratSales, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$StratSales <- as.numeric(attobo3$StratSales)
+
+attobo3$EffortSales <- factor(attobo3$EffortSales, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$EffortSales <- as.numeric(attobo3$EffortSales)
+
+EffortSales <- attobo3$EffortSales
+            
+StratSales <- attobo3$StratSales
+
+choices <- c(EffortSales, StratSales)
+
+condition <- c(rep(0, length(EffortSales)), rep(1, length(StratSales)))
+
+N <- length(choices)
+
+attobo3.datjags <- list(choices = choices, condition = condition, N = N, J = 4)
+attobo3.datjags
+
+```
+
+## Writing Model
+
+```{r}
+
+attobo3.model <- function() { 
+  for (i in 1:N) {
+    
+    choices[i] ~ dcat(p[i, 1:J])
+    
+    for (j in 1:J) {
+      
+      p[i, j] <- q[i, j]/sum(q[i, 1:J])
+      #q[i, j] is exp(XB)
+      # probability of px i picking option j
+      
+      log(q[i, j]) <- b[j] + c[j]*condition[i] 
+      # decomposed into effect of condition + participant variance
+      
+      }
+      
+    }
+
+  b[1] <- 0
+  c[1] <- 0
+
+  # priors
+    for(j in 2:J) {
+     b[j] ~ dnorm(0,0.01)
+     c[j] ~ dnorm(0,0.01)
+     
+    }
+  
+  
+  
+}
+```
+
+## Parameters to monitor
+
+```{r}
+
+params <- c( "p", "b", "c")
+
+```
+
+## Initial Starting Values
+
+```{r}
+
+inits1 <- list("b" = c(NA, rep(0,3)), 
+               "c" = c(NA, rep(0,3))
+)
+
+inits2 <- list("b" = c(NA, rep(2,3)), 
+               "c" =c(NA, rep(2,3))
+)
+
+
+inits3 <- list("b" = c(NA, rep(3,3)), 
+               "c" = c(NA, rep(3,3))
+)
+
+
+attobo3.inits <- list(inits1, inits2, inits3)
+
+#attobo3.inits
+
+
+```
+
+
+## Fitting model
+
+```{r eval=FALSE}
+set.seed(21082019)
+
+attobo3.fit <- jags(data = attobo3.datjags, inits = attobo3.inits, parameters.to.save = params,
+                    n.chains = 3, n.iter = 100000, n.burnin = 40000,
+                    model.file = attobo3.model, n.thin = 10)
+
+attobo3.fit.upd <- update(attobo3.fit, n.iter =1000)
+attobo3.fit.upd <- autojags(attobo3.fit)
+```
+
+## Summarizing Model
+
+```{r eval = FALSE}
+
+attobo3.mcmc <- as.mcmc(attobo3.fit)
+
+#save(attobo3.mcmc, file = "attobo3.sales.mcmc.RData")
+
+
+#summary(attobo3.mcmc)
+
+```
+
+## Checking Model Convergence
+
+```{r eval = FALSE}
+
+MCMCtrace(attobo3.mcmc[,1:9], ind = TRUE, pdf = FALSE  )
+
+autocorr.plot(attobo3.mcmc[1][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[2][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[3][,1:9], ask = FALSE)
+```
+
+```{r}
+
+attobo3.out <- as.data.frame(as.matrix(attobo3.mcmc))
+
+```
+
+## Preparing Results for Reporting
+
+```{r}
+
+pred.p <- attobo3.out[, grep("p[", colnames(attobo3.out), fixed = T)]
+
+## estimated probability for each participan
+pred.p <- attobo3.out[, c(mixedsort(names(pred.p)))]
+
+pred.effort <- pred.p[, 1:1200]
+
+## estimated probability for each participant and each response category
+pred.effort.default <- pred.effort[, grep(",1]", colnames(pred.effort), fixed = T)]
+
+pred.effort.brute <- pred.effort[, grep(",2]", colnames(pred.effort), fixed = T)]
+
+pred.effort.method <- pred.effort[, grep(",3]", colnames(pred.effort), fixed = T)]
+
+pred.effort.giveup <- pred.effort[, grep(",4]", colnames(pred.effort), fixed = T)]
+
+
+pred.strat <- pred.p[, 1201:2400]
+
+## estimated probability for each participant and each response category
+pred.strat.default <- pred.strat[, grep(",1]", colnames(pred.strat), fixed = T)]
+
+pred.strat.brute <- pred.strat[, grep(",2]", colnames(pred.strat), fixed = T)]
+
+pred.strat.method <- pred.strat[, grep(",3]", colnames(pred.strat), fixed = T)]
+
+pred.strat.giveup <- pred.strat[, grep(",4]", colnames(pred.strat), fixed = T)]
+
+
+
+## means probability for each category
+
+pred.effort.default$mean <- apply(pred.effort.default, 1, mean)
+
+q <- quantile(pred.effort.default$mean, probs = c(.025, .5, .975))
+
+effort.default <- round(c(mean(pred.effort.default$mean), sd(pred.effort.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.default
+
+pred.effort.brute$mean <- apply(pred.effort.brute, 1, mean)
+
+q <- quantile(pred.effort.brute$mean, probs = c(.025, .5, .975))
+
+effort.brute <- round(c(mean(pred.effort.brute$mean), sd(pred.effort.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.brute
+
+pred.effort.method$mean <- apply(pred.effort.method, 1, mean)
+
+q <- quantile(pred.effort.method$mean, probs = c(.025, .5, .975))
+
+effort.method <- round(c(mean(pred.effort.method$mean), sd(pred.effort.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.method
+
+pred.effort.giveup$mean <- apply(pred.effort.giveup, 1, mean)
+
+q <- quantile(pred.effort.giveup$mean, probs = c(.025, .5, .975))
+
+effort.giveup <- round(c(mean(pred.effort.giveup$mean), sd(pred.effort.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.giveup
+
+## strat
+
+pred.strat.default$mean <- apply(pred.strat.default, 1, mean)
+
+q <- quantile(pred.strat.default$mean, probs = c(.025, .5, .975))
+
+strat.default <- round(c(mean(pred.strat.default$mean), sd(pred.strat.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.default
+
+pred.strat.brute$mean <- apply(pred.strat.brute, 1, mean)
+
+q <- quantile(pred.strat.brute$mean, probs = c(.025, .5, .975))
+
+strat.brute <- round(c(mean(pred.strat.brute$mean), sd(pred.strat.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.brute
+
+pred.strat.method$mean <- apply(pred.strat.method, 1, mean)
+
+q <- quantile(pred.strat.method$mean, probs = c(.025, .5, .975))
+
+strat.method <- round(c(mean(pred.strat.method$mean), sd(pred.strat.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.method
+
+pred.strat.giveup$mean <- apply(pred.strat.giveup, 1, mean)
+
+q <- quantile(pred.strat.giveup$mean, probs = c(.025, .5, .975))
+
+strat.giveup <- round(c(mean(pred.strat.giveup$mean), sd(pred.strat.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.giveup
+
+
+```
+
+```{r}
+
+sales.posteriors <- list(sales.strat.default = strat.default,
+                        sales.strat.brute = strat.brute,
+                        sales.strat.method = strat.method,
+                        sales.strat.giveup = strat.giveup,
+                        sales.effort.default = effort.default,
+                        sales.effort.brute =effort.brute,
+                        sales.effort.method = effort.method,
+                        sales.effort.giveup = effort.giveup
+                        )
+
+sales.posteriors
+
+```
+
+## Presenting Results Graphically
+
+### Predicted Probability for each Advice Type
+
+```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+attobo3.posterior.coefs <- data.frame(pred.effort.default[, "mean"], pred.strat.default[, "mean"], 
+                                 pred.effort.brute[, "mean"], pred.strat.brute[, "mean"],
+                                 pred.effort.method[, "mean"], pred.strat.method[, "mean"],
+                                 pred.effort.giveup[, "mean"], pred.strat.giveup[, "mean"])
+
+names(attobo3.posterior.coefs) <- c("Effort Default","Strategy Default", "Effort Bruteforce","Strategy Bruteforce",     "Effort Method","Strategy Method", "Effort Give Up","Strategy Give Up")
+
+attobo3.posterior.coefs.long <- gather(attobo3.posterior.coefs)
+
+attobo3.posterior.coefs.long$key <- factor(attobo3.posterior.coefs.long$key, levels = c("Effort Default", "Strategy Default", "Effort Bruteforce","Strategy Bruteforce", "Effort Method", "Strategy Method", "Effort Give Up",
+                                      "Strategy Give Up"))
+
+
+```
+
+```{r}
+library("ggridges")
+ggplot(data = attobo3.posterior.coefs.long, aes(x = value, y = key)) + 
+  stat_density_ridges(quantile_lines = TRUE, 
+                      quantiles = c(0.025, 0.5, 0.975), 
+                      alpha = 0.7)
+```
+
+```{r}
+attobo3.posterior.coefs.sum <- summarize(group_by(attobo3.posterior.coefs.long, key),
+                                        mean_coef = mean(value),
+                                        lower_coef = quantile(value, probs = c(0.025)),
+                                        upper_coef = quantile(value, probs = c(0.975)))
+
+sales.summary <- attobo3.posterior.coefs.sum
+
+#save(sales.summary, file = "sales.summary.RData")
+
+```
+
+
+
+############################################################
+
+
+
+# Relation Scenario Analysis
+
+## Preparing Data
+
+```{r}
+
+attobo3$StratRelation <- factor(attobo3$StratRelation, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$StratRelation <- as.numeric(attobo3$StratRelation)
+
+attobo3$EffortRelation <- factor(attobo3$EffortRelation, levels = c("Default", "BF", "Method", "Give up"))
+attobo3$EffortRelation <- as.numeric(attobo3$EffortRelation)
+
+EffortRelation <- attobo3$EffortRelation
+            
+StratRelation <- attobo3$StratRelation
+
+choices <- c(EffortRelation, StratRelation)
+
+condition <- c(rep(0, length(EffortRelation)), rep(1, length(StratRelation)))
+
+N <- length(choices)
+
+attobo3.datjags <- list(choices = choices, condition = condition, N = N, J = 4)
+attobo3.datjags
+
+```
+
+## Writing Model
+
+```{r}
+
+attobo3.model <- function() { 
+  for (i in 1:N) {
+    
+    choices[i] ~ dcat(p[i, 1:J])
+    
+    for (j in 1:J) {
+      
+      p[i, j] <- q[i, j]/sum(q[i, 1:J])
+      #q[i, j] is exp(XB)
+      # probability of px i picking option j
+      
+      log(q[i, j]) <- b[j] + c[j]*condition[i] 
+      # decomposed into effect of condition + participant variance
+      
+      }
+      
+    }
+
+  b[1] <- 0
+  c[1] <- 0
+
+  # priors
+    for(j in 2:J) {
+     b[j] ~ dnorm(0,0.01)
+     c[j] ~ dnorm(0,0.01)
+     
+    }
+  
+  
+  
+}
+```
+
+## Parameters to monitor
+
+```{r}
+
+params <- c( "p", "b", "c")
+
+```
+
+## Initial Starting Values
+
+```{r}
+
+inits1 <- list("b" = c(NA, rep(0,3)), 
+               "c" = c(NA, rep(0,3))
+)
+
+inits2 <- list("b" = c(NA, rep(2,3)), 
+               "c" =c(NA, rep(2,3))
+)
+
+
+inits3 <- list("b" = c(NA, rep(3,3)), 
+               "c" = c(NA, rep(3,3))
+)
+
+
+attobo3.inits <- list(inits1, inits2, inits3)
+
+#attobo3.inits
+
+
+```
+
+
+## Fitting model
+
+```{r eval=FALSE}
+set.seed(21082019)
+
+attobo3.fit <- jags(data = attobo3.datjags, inits = attobo3.inits, parameters.to.save = params,
+                    n.chains = 3, n.iter = 100000, n.burnin = 40000,
+                    model.file = attobo3.model, n.thin = 10)
+
+attobo3.fit.upd <- update(attobo3.fit, n.iter =1000)
+attobo3.fit.upd <- autojags(attobo3.fit)
+```
+
+## Summarizing Model
+
+```{r eval = FALSE}
+
+attobo3.mcmc <- as.mcmc(attobo3.fit)
+
+#save(attobo3.mcmc, file = "attobo3.relation.mcmc.RData")
+
+
+ 
+#summary(attobo3.mcmc)
+
+```
+
+## Checking Model Convergence
+
+```{r eval = FALSE}
+
+MCMCtrace(attobo3.mcmc[,1:9], ind = TRUE, pdf = FALSE  )
+
+autocorr.plot(attobo3.mcmc[1][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[2][,1:9], ask = FALSE)
+
+autocorr.plot(attobo3.mcmc[3][,1:9], ask = FALSE)
+```
+
+```{r}
+
+attobo3.out <- as.data.frame(as.matrix(attobo3.mcmc))
+
+```
+
+## Preparing Results for Reporting
+
+```{r}
+
+pred.p <- attobo3.out[, grep("p[", colnames(attobo3.out), fixed = T)]
+
+## estimated probability for each participan
+pred.p <- attobo3.out[, c(mixedsort(names(pred.p)))]
+
+pred.effort <- pred.p[, 1:1200]
+
+## estimated probability for each participant and each response category
+pred.effort.default <- pred.effort[, grep(",1]", colnames(pred.effort), fixed = T)]
+
+pred.effort.brute <- pred.effort[, grep(",2]", colnames(pred.effort), fixed = T)]
+
+pred.effort.method <- pred.effort[, grep(",3]", colnames(pred.effort), fixed = T)]
+
+pred.effort.giveup <- pred.effort[, grep(",4]", colnames(pred.effort), fixed = T)]
+
+
+pred.strat <- pred.p[, 1201:2400]
+
+## estimated probability for each participant and each response category
+pred.strat.default <- pred.strat[, grep(",1]", colnames(pred.strat), fixed = T)]
+
+pred.strat.brute <- pred.strat[, grep(",2]", colnames(pred.strat), fixed = T)]
+
+pred.strat.method <- pred.strat[, grep(",3]", colnames(pred.strat), fixed = T)]
+
+pred.strat.giveup <- pred.strat[, grep(",4]", colnames(pred.strat), fixed = T)]
+
+
+
+## means probability for each category
+
+pred.effort.default$mean <- apply(pred.effort.default, 1, mean)
+
+q <- quantile(pred.effort.default$mean, probs = c(.025, .5, .975))
+
+effort.default <- round(c(mean(pred.effort.default$mean), sd(pred.effort.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.default
+
+pred.effort.brute$mean <- apply(pred.effort.brute, 1, mean)
+
+q <- quantile(pred.effort.brute$mean, probs = c(.025, .5, .975))
+
+effort.brute <- round(c(mean(pred.effort.brute$mean), sd(pred.effort.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.brute
+
+pred.effort.method$mean <- apply(pred.effort.method, 1, mean)
+
+q <- quantile(pred.effort.method$mean, probs = c(.025, .5, .975))
+
+effort.method <- round(c(mean(pred.effort.method$mean), sd(pred.effort.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.method
+
+pred.effort.giveup$mean <- apply(pred.effort.giveup, 1, mean)
+
+q <- quantile(pred.effort.giveup$mean, probs = c(.025, .5, .975))
+
+effort.giveup <- round(c(mean(pred.effort.giveup$mean), sd(pred.effort.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+effort.giveup
+
+## strat
+
+pred.strat.default$mean <- apply(pred.strat.default, 1, mean)
+
+q <- quantile(pred.strat.default$mean, probs = c(.025, .5, .975))
+
+strat.default <- round(c(mean(pred.strat.default$mean), sd(pred.strat.default$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.default
+
+pred.strat.brute$mean <- apply(pred.strat.brute, 1, mean)
+
+q <- quantile(pred.strat.brute$mean, probs = c(.025, .5, .975))
+
+strat.brute <- round(c(mean(pred.strat.brute$mean), sd(pred.strat.brute$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.brute
+
+pred.strat.method$mean <- apply(pred.strat.method, 1, mean)
+
+q <- quantile(pred.strat.method$mean, probs = c(.025, .5, .975))
+
+strat.method <- round(c(mean(pred.strat.method$mean), sd(pred.strat.method$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.method
+
+pred.strat.giveup$mean <- apply(pred.strat.giveup, 1, mean)
+
+q <- quantile(pred.strat.giveup$mean, probs = c(.025, .5, .975))
+
+strat.giveup <- round(c(mean(pred.strat.giveup$mean), sd(pred.strat.giveup$mean),
+                         q[[1]], q[[2]], q[[3]]), digits = 2)
+
+strat.giveup
+
+
+```
+
+```{r}
+
+relation.posteriors <- list(relation.strat.default = strat.default,
+                        relation.strat.brute = strat.brute,
+                        relation.strat.method = strat.method,
+                        relation.strat.giveup = strat.giveup,
+                        relation.effort.default = effort.default,
+                        relation.effort.brute =effort.brute,
+                        relation.effort.method = effort.method,
+                        relation.effort.giveup = effort.giveup
+                        )
+
+relation.posteriors
+
+```
+
+## Presenting Results Graphically
+
+### Predicted Probability for each Advice Type
+
+```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+attobo3.posterior.coefs <- data.frame(pred.effort.default[, "mean"], pred.strat.default[, "mean"], 
+                                 pred.effort.brute[, "mean"], pred.strat.brute[, "mean"],
+                                 pred.effort.method[, "mean"], pred.strat.method[, "mean"],
+                                 pred.effort.giveup[, "mean"], pred.strat.giveup[, "mean"])
+
+names(attobo3.posterior.coefs) <- c("Effort Default","Strategy Default", "Effort Bruteforce","Strategy Bruteforce",     "Effort Method","Strategy Method", "Effort Give Up","Strategy Give Up")
+
+attobo3.posterior.coefs.long <- gather(attobo3.posterior.coefs)
+
+attobo3.posterior.coefs.long$key <- factor(attobo3.posterior.coefs.long$key, levels = c("Effort Default", "Strategy Default", "Effort Bruteforce","Strategy Bruteforce", "Effort Method", "Strategy Method", "Effort Give Up",
+                                      "Strategy Give Up"))
+
+
+```
+
+```{r}
+library("ggridges")
+ggplot(data = attobo3.posterior.coefs.long, aes(x = value, y = key)) + 
+  stat_density_ridges(quantile_lines = TRUE, 
+                      quantiles = c(0.025, 0.5, 0.975), 
+                      alpha = 0.7)
+```
+
+```{r}
+attobo3.posterior.coefs.sum <- summarize(group_by(attobo3.posterior.coefs.long, key),
+                                        mean_coef = mean(value),
+                                        lower_coef = quantile(value, probs = c(0.025)),
+                                        upper_coef = quantile(value, probs = c(0.975)))
+
+relation.summary <- attobo3.posterior.coefs.sum
+
+#save(relation.summary, file = "relation.summary.RData")
+
+```
+
+
+
+############################################################
+
+
+
+# Reporting Results
+
+```{r}
+
+attobo3.posteriors <- list(acad.posteriors = acad.posteriors,
+                           sports.posteriors = sports.posteriors,
+                           diet.posteriors = diet.posteriors,
+                           team.posteriors = team.posteriors,
+                           parent.posteriors = parent.posteriors,
+                           sales.posteriors = sales.posteriors,
+                           relation.posteriors = relation.posteriors)
+
+attobo3.posteriors
+
+#save(attobo3.posteriors, file = "attobo3.posteriors.RData")
+
+```
+
