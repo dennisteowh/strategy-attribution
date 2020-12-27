@@ -1,14 +1,22 @@
 ---
 title: "Pre-test Analysis"
-output:   
+author: "Dennis Teo"
+output:
   html_document:
-    toc: true
+    theme: readable
+    toc: yes
     toc_depth: 3
-    number_sections: true
-    theme: united
+    toc_float: true
+    highlight: tango
+    df_print: paged
+fontsize: 18pt
 ---
 
-```{r echo=FALSE, warning=FALSE, message=FALSE, results='hide', eval=TRUE}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+```{r echo=FALSE, results='hide'}
 
 library(psych)
 library(ggplot2)
@@ -36,6 +44,7 @@ library(bayestestR)
 library("ggmcmc")
 library(brms)
 library(BayesFactor)
+library(MCMCvis)
 
 load("attobo.pilot.RData")
 
@@ -98,7 +107,7 @@ attobo.uncon.long <- data.frame(
 
 # Descriptive Stats
 
-```{r echo=TRUE, warning=FALSE, message=FALSE, eval=TRUE}
+```{r }
 
 attobo.pilot %>%
   summarise(AptOutMean = mean(AptOut, na.rm = T),
@@ -155,38 +164,24 @@ t.test(attobo.pilot$StratOut, attobo.pilot$EffortOut, paired = TRUE)
 
 ### Bayesian Model - Locus
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
-library(R2jags)
-library(rjags)
-library(runjags)
-library("lattice")
-library("superdiag")
-library(gtools)
 
-library(bayestestR) 
-library("ggmcmc")
-
+```{r eval = F}
 
 apt.out <- attobo.pilot$AptOut
 eff.out <- attobo.pilot$EffortOut
 strat.out <- attobo.pilot$StratOut
 
-y <- c(apt.out, eff.out, strat.out) 
-effort <- c(rep(0, 202), rep(1, 202), rep(0, 202))
-strategy <- c(rep(0, 202), rep(0, 202), rep(1, 202))
+y <- c(apt.out, eff.out, strat.out)
+grand.mean <- mean(y, na.rm = T)
 
-grand.mean <- mean(y)
-
-attobo.pilot.datjags <- list(y = y, effort = effort, strategy =strategy, N = length(y), grand.mean = grand.mean)
+attobo.pilot.datjags <- list(apt.out = apt.out, eff.out = eff.out, strat.out = strat.out, N = nrow(attobo.pilot), grand.mean = grand.mean)
 attobo.pilot.datjags
-
-attobo.pilot.datjags$b0 <- rep(0, 2)
-attobo.pilot.datjags$B0 <- diag(0.01, 2)
 ```
+
 
 ### Model Specification
 
-```{r}
+```{r eval = F}
 
 attobo.pilot.model <- function() {
   for(i in 1:N){
@@ -215,40 +210,14 @@ attobo.pilot.model <- function() {
 
 ```
 
-```{r}
 
+```{r eval = F}
 
-attobo.pilot.model <- function() {
-  for (i in 1:N){
-    for (j in 1:4){
-      logit(gamma[i,j]) <- tau1[j] - mu[i]  ## Note the use of tau1 instead of tau
-    }
-    y[i] ~ dcat(p[i, 1:5])
-    p[i,1] <- gamma[i,1]
-    p[i,2] <- gamma[i,2] - gamma[i,1]
-    p[i,3] <- gamma[i,3] - gamma[i,2]
-    p[i,4] <- gamma[i,4] - gamma[i,3]
-    p[i,5] <- 1 - gamma[i,4]
-    mu[i] <- b[1] * effort[i] + b[2] * strategy[i]
-}
-  for(i in 1:4){
-    tau[i] ~ dnorm(grand.mean,.001)  ## Note the use of tau
-}
-  tau1[1:4] <- sort(tau)  ## Note the use of tau1 / tau
-b[1:2] ~ dmnorm(b0[], B0[, ])
-  
-}
-```
-
-
-
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
-
-attobo.pilot.params <- c("b", "p", "tau", "mu")
+attobo.pilot.params <- c("diff", "mu.apt", "mu.eff", "mu.strat", "sigma")
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 
 
@@ -277,31 +246,9 @@ attobo.pilot.inits <- list(attobo.pilot.inits1, attobo.pilot.inits2,attobo.pilot
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
 
 
-
-attobo.pilot.inits1 <-  list( "tau" =  rep(1, 4),
-                        "b" = rep(0, 2))
-
-attobo.pilot.inits2 <- list( "tau" =  rep(3, 4),
-                        "b" = rep(0, 2))
-
-attobo.pilot.inits3 <- list( "tau" =  rep(2, 4),
-                        "b" = rep(1, 2))
-
-attobo.pilot.inits4 <- list( "tau" =  rep(1, 4),
-                        "b" = rep(2, 2))
-
-attobo.pilot.inits5 <- list( "tau" =  rep(3, 4),
-                        "b" = rep(0, 2))
-
-attobo.pilot.inits <- list(attobo.pilot.inits1, attobo.pilot.inits2,attobo.pilot.inits3, attobo.pilot.inits4,attobo.pilot.inits5)
-
-```
-
-
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 set.seed(1128)
 attobo.pilot.fit <- jags(data = attobo.pilot.datjags, inits = attobo.pilot.inits, parameters.to.save = attobo.pilot.params, 
@@ -315,7 +262,7 @@ attobo.pilot.fit.upd <- autojags(attobo.pilot.fit)
 ```{r eval = FALSE}
 
 attobo.pilot.fit.mcmc <- as.mcmc(attobo.pilot.fit)
-#save(attobo.pilot.fit.mcmc, file = "attobo.pilot.locus.RData")
+save(attobo.pilot.fit.mcmc, file = "attobo.pilot.locus.mcmc.RData")
 summary(attobo.pilot.fit.mcmc)
 
 ```
@@ -324,22 +271,35 @@ summary(attobo.pilot.fit.mcmc)
 
 ```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
                                       
-xyplot(attobo.pilot.fit.mcmc)
+load("attobo.pilot.locus.mcmc.RData")
 
-autocorr.plot(attobo.pilot.fit.mcmc[1], ask = FALSE)
+#  15 traces
+MCMCtrace(attobo.pilot.fit.mcmc[,1:15], ind = TRUE, pdf = FALSE )
 
-autocorr.plot(attobo.pilot.fit.mcmc[2], ask = FALSE)
+autocorr.plot(attobo.pilot.fit.mcmc[1][,1:15], ask = FALSE)
 
-densityplot(attobo.pilot.fit.mcmc)
+autocorr.plot(attobo.pilot.fit.mcmc[2][,1:15], ask = FALSE)
+
+autocorr.plot(attobo.pilot.fit.mcmc[3][,1:15], ask = FALSE)
+
+autocorr.plot(attobo.pilot.fit.mcmc[4][,1:15], ask = FALSE)
+
+autocorr.plot(attobo.pilot.fit.mcmc[5][,1:15], ask = FALSE)
+
 ```
 
 ### Calculating quantiles
+```{r eval=F}
+attobo.pilot.out <- as.data.frame(as.matrix(attobo.pilot.fit.mcmc))
+save(attobo.pilot.out, file = "attobo.pilot.locus.RData")
+```
+
+
 ```{r}
 
-attobo.pilot.out <- as.data.frame(as.matrix(attobo.pilot.fit.mcmc))
-pred.diff <- attobo.pilot.out[, grep("diff[", colnames(attobo.pilot.out), fixed = T)]
+load("attobo.pilot.locus.RData")
 
-#save(attobo.pilot.out, file = "attobo.pilot.locus.RData")
+pred.diff <- attobo.pilot.out[, grep("diff[", colnames(attobo.pilot.out), fixed = T)]
 
 ## estimated difference for each participant
 pred.diff <- pred.diff[, c(mixedsort(names(pred.diff)))]
@@ -365,13 +325,12 @@ quantile(diff.3$mean.3, probs = c(.025, .5, .975))
 
 ### Presenting Results
 
-```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+```{r }
 attobo.pilot.posterior.coefs <- cbind(diff.1$mean.1, diff.2$mean.2, diff.3$mean.3)
 attobo.pilot.posterior.coefs <- as.data.frame(attobo.pilot.posterior.coefs)
 names(attobo.pilot.posterior.coefs) <- c("Effort - Aptitude", "Strategy - Aptitude", "Strategy - Effort")
 
 attobo.pilot.posterior.coefs.long <- gather(attobo.pilot.posterior.coefs)
-head(attobo.pilot.posterior.coefs.long)
 
 
 ```
@@ -388,66 +347,6 @@ ggplot(data = attobo.pilot.posterior.coefs.sum, aes(x = median_coef, y = key)) +
   geom_vline(xintercept = 0, linetype = "dashed") + 
   xlab("Posterior estimate") + ylab("") + 
   theme_bw()
-
-```
-
-
-## Locus brms package (hypothesis: strategy=effort=aptitude)
-
-```{r}
-get_prior(locus ~ attribution + (1|id), data = attobo.locus.long)
-## define prior sd = 2
-prior.b <- prior_string("normal(0,2)", class = "b")
-
-bf.fit.intercept <- brm(locus ~ 1 + (1|id), data = attobo.locus.long, prior = NULL, save_all_pars = TRUE, seed = 1128,family = cumulative(link = "logit", threshold = "flexible"), iter = 10000, warmup = 1000, chains = 4)
-
-bf.fit.no.constraint <- brm(locus ~ attribution + (1|id), data = attobo.locus.long, prior = prior.b, save_all_pars = TRUE, seed = 1128,family = cumulative(link = "logit", threshold = "flexible"), iter = 10000, warmup = 1000, chains = 4)
-
-# attobo.locus.long$strat.equal.effort <- factor(attobo.locus.long$attribution, levels = c("Aptitude", "Effort", "Strategy"), labels = c("Aptitude", "SE", "SE"))
-
-attobo.locus.long$effort.equal.apt <- factor(attobo.locus.long$attribution, levels = c("Aptitude", "Effort", "Strategy"), labels = c("EA", "EA", "Strategy"))
-
-bf.fit.ea.constraint <-  brm(locus ~ effort.equal.apt + (1|id), data = attobo.locus.long, prior = prior.b, save_all_pars = TRUE, seed = 1128, family = cumulative(link = "logit", threshold = "flexible"), iter = 10000, warmup = 1000, chains = 4)
-
-set.seed(1128)
-
-bf.all <- bayes_factor(bf.fit.no.constraint, bf.fit.intercept)
-
-bf.ea.ratio <- bayes_factor(bf.fit.no.constraint, bf.fit.ea.constraint)
-
-bf.ea.main <- bayes_factor(bf.fit.ea.constraint, bf.fit.intercept)
-
-report.bf.prior1.locus <- list(bf.all = bf.all[[1]],
-                         bf.ea.ratio = bf.ea.ratio[[1]],
-                         bf.ea.main = bf.ea.main[[1]])
-report.bf.prior1.locus
-
-
-
-#save(report.bf.prior1.locus, file = "report.bf.prior1.locus.RData")
-
-bf.model.locus <- list(bf.fit.intercept = bf.fit.intercept,
-                     bf.fit.no.constraint  = bf.fit.no.constraint ,
-                     bf.fit.ea.constraint = bf.fit.ea.constraint)
-
-#save(bf.model.locus, file = "bf.model.locus.RData")
-
-
-bf.fit.intercept <- bf.model.locus$bf.fit.intercept
-
-bf.fit.no.constraint <- bf.model.locus$bf.fit.no.constraint
-
-bf.fit.se.constraint <- bf.model.locus$bf.fit.se.constraint
-
-
-comparison <- bayesfactor_models(bf.fit.intercept, bf.fit.se.constraint, bf.fit.no.constraint)
-
-update(comparison, reference = 2)
-
-
-
-
-
 
 ```
 
@@ -469,23 +368,14 @@ t.test(attobo.pilot$StratVar, attobo.pilot$EffortVar, paired = TRUE)
 
 ### Bayesian Model - Variability
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
-library(R2jags)
-library(rjags)
-library(runjags)
-library("lattice")
-library("superdiag")
-library(gtools)
-
-library(bayestestR) 
-library("ggmcmc")
+```{r eval = F}
 
 apt.var <- attobo.pilot$AptVar
 eff.var <- attobo.pilot$EffortVar
 strat.var <- attobo.pilot$StratVar
 
 y <- c(apt.var, eff.var, strat.var)
-grand.mean <- mean(y)
+grand.mean <- mean(y, na.rm = T)
 
 attobo.pilot.datjags <- list(apt.var = apt.var, eff.var = eff.var, strat.var = strat.var, N = nrow(attobo.pilot), grand.mean = grand.mean)
 attobo.pilot.datjags
@@ -493,7 +383,7 @@ attobo.pilot.datjags
 
 ### Model Specification
 
-```{r}
+```{r eval = F}
 
 attobo.pilot.model <- function() {
   for(i in 1:N){
@@ -523,13 +413,13 @@ attobo.pilot.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo.pilot.params <- c("diff", "mu.apt", "mu.eff", "mu.strat", "sigma")
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 
 
@@ -558,7 +448,7 @@ attobo.pilot.inits <- list(attobo.pilot.inits1, attobo.pilot.inits2,attobo.pilot
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 set.seed(1128)
 attobo.pilot.fit <- jags(data = attobo.pilot.datjags, inits = attobo.pilot.inits, parameters.to.save = attobo.pilot.params, 
@@ -572,7 +462,7 @@ attobo.pilot.fit.upd <- autojags(attobo.pilot.fit)
 ```{r eval = FALSE}
 
 attobo.pilot.fit.mcmc <- as.mcmc(attobo.pilot.fit)
-#save(attobo.pilot.fit.mcmc, file = "attobo.pilot.var.RData")
+save(attobo.pilot.fit.mcmc, file = "attobo.pilot.var.mcmc.RData")
 summary(attobo.pilot.fit.mcmc)
 
 ```
@@ -580,23 +470,34 @@ summary(attobo.pilot.fit.mcmc)
 ### Convergence Diagnostics
 
 ```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
-                                      
-xyplot(attobo.pilot.fit.mcmc)
+                  
+load("attobo.pilot.var.mcmc.RData")
+                    
+#  15 traces
+MCMCtrace(attobo.pilot.fit.mcmc[,1:15], ind = TRUE, pdf = FALSE )
 
-autocorr.plot(attobo.pilot.fit.mcmc[1], ask = FALSE)
+autocorr.plot(attobo.pilot.fit.mcmc[1][,1:15], ask = FALSE)
 
-autocorr.plot(attobo.pilot.fit.mcmc[2], ask = FALSE)
+autocorr.plot(attobo.pilot.fit.mcmc[2][,1:15], ask = FALSE)
 
-densityplot(attobo.pilot.fit.mcmc)
+autocorr.plot(attobo.pilot.fit.mcmc[3][,1:15], ask = FALSE)
+
+autocorr.plot(attobo.pilot.fit.mcmc[4][,1:15], ask = FALSE)
+
+autocorr.plot(attobo.pilot.fit.mcmc[5][,1:15], ask = FALSE)
 ```
 
 ### Calculating quantiles
-```{r}
-
+```{r eval = F}
 attobo.pilot.var <- as.data.frame(as.matrix(attobo.pilot.fit.mcmc))
-pred.diff <- attobo.pilot.var[, grep("diff[", colnames(attobo.pilot.var), fixed = T)]
+save(attobo.pilot.var, file = "attobo.pilot.var.RData")
+```
 
-#save(attobo.pilot.var, file = "attobo.pilot.var.RData")
+
+```{r}
+load("attobo.pilot.var.RData")
+
+pred.diff <- attobo.pilot.var[, grep("diff[", colnames(attobo.pilot.var), fixed = T)]
 
 ## estimated difference for each participant
 pred.diff <- pred.diff[, c(mixedsort(names(pred.diff)))]
@@ -628,7 +529,6 @@ attobo.pilot.posterior.coefs <- as.data.frame(attobo.pilot.posterior.coefs)
 names(attobo.pilot.posterior.coefs) <- c("Effort - Aptitude", "Strategy - Aptitude", "Strategy - Effort")
 
 attobo.pilot.posterior.coefs.long <- gather(attobo.pilot.posterior.coefs)
-head(attobo.pilot.posterior.coefs.long)
 
 
 ```
@@ -649,56 +549,6 @@ ggplot(data = attobo.pilot.posterior.coefs.sum, aes(x = median_coef, y = key)) +
 ```
 
 
-## var brms package (hypothesis: strategy=effort=aptitude)
-
-```{r}
-get_prior(var ~ attribution + (1|id), data = attobo.var.long)
-## define prior sd = 2
-prior.b <- prior_string("normal(0,2)", class = "b")
-
-bf.fit.intercept <- brm(var ~ 1 + (1|id), data = attobo.var.long, prior = NULL, save_all_pars = TRUE, seed = 1128,family = cumulative(link = "logit", threshold = "flexible"), iter = 10000, warmup = 1000, chains = 4)
-
-bf.fit.no.constraint <- brm(var ~ attribution + (1|id), data = attobo.var.long, prior = prior.b, save_all_pars = TRUE, seed = 1128,family = cumulative(link = "logit", threshold = "flexible"), iter = 10000, warmup = 1000, chains = 4)
-
-attobo.var.long$strat.equal.effort <- factor(attobo.var.long$attribution, levels = c("Aptitude", "Effort", "Strategy"), labels = c("Aptitude", "SE", "SE"))
-
-# attobo.var.long$strat.equal.apt <- factor(attobo.var.long$attribution, levels = c("Aptitude", "Effort", "Strategy"), labels = c("SA", "Effort", "SA"))
-
-bf.fit.se.constraint <-  brm(var ~ strat.equal.effort + (1|id), data = attobo.var.long, prior = prior.b, save_all_pars = TRUE, seed = 1128, family = cumulative(link = "logit", threshold = "flexible"), iter = 10000, warmup = 1000, chains = 4)
-
-set.seed(1128)
-
-bf.all <- bayes_factor(bf.fit.no.constraint, bf.fit.intercept)
-
-bf.se.ratio <- bayes_factor(bf.fit.no.constraint, bf.fit.se.constraint)
-
-bf.se.main <- bayes_factor(bf.fit.se.constraint, bf.fit.intercept)
-
-report.bf.prior1.var <- list(bf.all = bf.all[[1]], 
-                         bf.se.ratio = bf.se.ratio[[1]],
-                         bf.se.main = bf.se.main[[1]])
-report.bf.prior1.var
-
-
-# 
-#save(report.bf.prior1.var, file = "report.bf.prior1.var.RData")
-
-bf.model.var <- list(bf.fit.intercept = bf.fit.intercept,
-                     bf.fit.no.constraint  = bf.fit.no.constraint ,
-                     bf.fit.se.constraint = bf.fit.se.constraint)
-
-#save(bf.model.var, file = "bf.model.var.RData")
-
-comparison <- bayesfactor_models(bf.fit.intercept, bf.fit.se.constraint, bf.fit.no.constraint)
-update(comparison, reference = 2)
-
-
-```
-
-
-
-
-
 ## Uncontrollability
 
 ### Frequentist Estimates
@@ -716,16 +566,7 @@ t.test(attobo.pilot$StratUncon, attobo.pilot$EffortUncon, paired = TRUE)
 
 ### Bayesian Model - Uncontrollability
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
-library(R2jags)
-library(rjags)
-library(runjags)
-library("lattice")
-library("superdiag")
-library(gtools)
-
-library(bayestestR) 
-library("ggmcmc")
+```{r eval = F}
 
 apt.uncon <- attobo.pilot$AptUncon
 eff.uncon <- attobo.pilot$EffortUncon
@@ -740,7 +581,7 @@ attobo.pilot.datjags
 
 ### Model Specification
 
-```{r}
+```{r eval=F}
 
 attobo.pilot.model <- function() {
   for(i in 1:N){
@@ -770,13 +611,13 @@ attobo.pilot.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo.pilot.params <- c("diff", "mu.apt", "mu.eff", "mu.strat", "sigma")
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 
 
@@ -805,7 +646,7 @@ attobo.pilot.inits <- list(attobo.pilot.inits1, attobo.pilot.inits2,attobo.pilot
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 set.seed(1128)
 attobo.pilot.fit <- jags(data = attobo.pilot.datjags, inits = attobo.pilot.inits, parameters.to.save = attobo.pilot.params, 
@@ -819,7 +660,7 @@ attobo.pilot.fit.upd <- autojags(attobo.pilot.fit)
 ```{r eval = FALSE}
 
 attobo.pilot.fit.mcmc <- as.mcmc(attobo.pilot.fit)
-#save(attobo.pilot.fit.mcmc, file = "attobo.pilot.uncon.RData")
+save(attobo.pilot.fit.mcmc, file = "attobo.pilot.uncon.mcmc.RData")
 summary(attobo.pilot.fit.mcmc)
 
 ```
@@ -827,23 +668,33 @@ summary(attobo.pilot.fit.mcmc)
 ### Convergence Diagnostics
 
 ```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
-                                      
-xyplot(attobo.pilot.fit.mcmc)
 
-autocorr.plot(attobo.pilot.fit.mcmc[1], ask = FALSE)
+load("attobo.pilot.uncon.mcmc.RData")
 
-autocorr.plot(attobo.pilot.fit.mcmc[2], ask = FALSE)
+#  15 traces
+MCMCtrace(attobo.pilot.fit.mcmc[,1:15], ind = TRUE, pdf = FALSE )
 
-densityplot(attobo.pilot.fit.mcmc)
+autocorr.plot(attobo.pilot.fit.mcmc[1][,1:15], ask = FALSE)
+
+autocorr.plot(attobo.pilot.fit.mcmc[2][,1:15], ask = FALSE)
+
+autocorr.plot(attobo.pilot.fit.mcmc[3][,1:15], ask = FALSE)
+
+autocorr.plot(attobo.pilot.fit.mcmc[4][,1:15], ask = FALSE)
+
+autocorr.plot(attobo.pilot.fit.mcmc[5][,1:15], ask = FALSE)
 ```
 
 ### Calculating quantiles
-```{r}
-
+```{r eval = F}
 attobo.pilot.uncon <- as.data.frame(as.matrix(attobo.pilot.fit.mcmc))
-pred.diff <- attobo.pilot.uncon[, grep("diff[", colnames(attobo.pilot.uncon), fixed = T)]
+save(attobo.pilot.uncon, file = "attobo.pilot.uncon.RData")
+```
 
-#save(attobo.pilot.uncon, file = "attobo.pilot.uncon.RData")
+```{r}
+load("attobo.pilot.uncon.RData")
+
+pred.diff <- attobo.pilot.uncon[, grep("diff[", colnames(attobo.pilot.uncon), fixed = T)]
 
 ## estimated difference for each participant
 pred.diff <- pred.diff[, c(mixedsort(names(pred.diff)))]
@@ -875,8 +726,6 @@ attobo.pilot.posterior.coefs <- as.data.frame(attobo.pilot.posterior.coefs)
 names(attobo.pilot.posterior.coefs) <- c("Effort - Aptitude", "Strategy - Aptitude", "Strategy - Effort")
 
 attobo.pilot.posterior.coefs.long <- gather(attobo.pilot.posterior.coefs)
-head(attobo.pilot.posterior.coefs.long)
-
 
 ```
 
@@ -894,53 +743,3 @@ ggplot(data = attobo.pilot.posterior.coefs.sum, aes(x = median_coef, y = key)) +
   theme_bw()
 
 ```
-
-
-## uncon brms package (hypothesis: strategy=effort=aptitude)
-
-```{r}
-get_prior(uncon ~ attribution + (1|id), data = attobo.uncon.long)
-## define prior sd = 2
-prior.b <- prior_string("normal(0,2)", class = "b")
-
-bf.fit.intercept <- brm(uncon ~ 1 + (1|id), data = attobo.uncon.long, prior = NULL, save_all_pars = TRUE, seed = 1128,family = cumulative(link = "logit", threshold = "flexible"), iter = 10000, warmup = 1000, chains = 4)
-
-bf.fit.no.constraint <- brm(uncon ~ attribution + (1|id), data = attobo.uncon.long, prior = prior.b, save_all_pars = TRUE, seed = 1128,family = cumulative(link = "logit", threshold = "flexible"), iter = 10000, warmup = 1000, chains = 4)
-
-attobo.uncon.long$strat.equal.effort <- factor(attobo.uncon.long$attribution, levels = c("Aptitude", "Effort", "Strategy"), labels = c("Aptitude", "SE", "SE"))
-
-# attobo.uncon.long$strat.equal.apt <- factor(attobo.uncon.long$attribution, levels = c("Aptitude", "Effort", "Strategy"), labels = c("SA", "Effort", "SA"))
-
-bf.fit.se.constraint <-  brm(uncon ~ strat.equal.effort + (1|id), data = attobo.uncon.long, prior = prior.b, save_all_pars = TRUE, seed = 1128, family = cumulative(link = "logit", threshold = "flexible"), iter = 10000, warmup = 1000, chains = 4)
-
-set.seed(1128)
-
-bf.all <- bayes_factor(bf.fit.no.constraint, bf.fit.intercept)
-
-bf.se.ratio <- bayes_factor(bf.fit.no.constraint, bf.fit.se.constraint)
-
-bf.se.main <- bayes_factor(bf.fit.se.constraint, bf.fit.intercept)
-
-report.bf.prior1.uncon <- list(bf.all = bf.all[[1]],
-                         bf.se.ratio = bf.se.ratio[[1]],
-                         bf.se.main = bf.se.main[[1]])
-report.bf.prior1.uncon
-
-
-#
-#save(report.bf.prior1.uncon, file = "report.bf.prior1.uncon.RData")
-
-bf.model.uncon <- list(bf.fit.intercept = bf.fit.intercept,
-                     bf.fit.no.constraint  = bf.fit.no.constraint ,
-                     bf.fit.se.constraint = bf.fit.se.constraint)
-
-#save(bf.model.uncon, file = "bf.model.uncon.RData")
-
-
-comparison <- bayesfactor_models(bf.fit.intercept, bf.fit.se.constraint, bf.fit.no.constraint)
-update(comparison, reference = 2)
-
-
-```
-
-
