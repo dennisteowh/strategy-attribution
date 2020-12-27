@@ -1,14 +1,22 @@
 ---
 title: "Study 1 Analysis"
-output:   
+author: "Dennis Teo"
+output:
   html_document:
-    toc: true
+    theme: readable
+    toc: yes
     toc_depth: 3
-    number_sections: true
-    theme: united
+    toc_float: true
+    highlight: tango
+    df_print: paged
+fontsize: 18pt
 ---
 
-```{r echo=FALSE, warning=FALSE, message=FALSE, results='hide', eval=TRUE}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+```{r results='hide'}
 
 library(psych)
 library(ggplot2)
@@ -62,19 +70,19 @@ attobo$expectancy <- ifelse(attobo$expectancy == 1, .999,
 
 # Descriptive Stats
 
-```{r echo=TRUE, warning=FALSE, message=FALSE, eval=TRUE}
+```{r }
 ## Sample Breakdown
 group_by(attobo, attribution) %>%
   summarise(n())
   
 ## means and sd of DVs
-aggregate(cbind(method, bruteforce, seekhelp)~attribution, data=attobo, FUN=mean)
+aggregate(cbind(combined_method, bruteforce, seekhelp)~attribution, data=attobo, FUN=mean)
 
-aggregate(cbind(method, bruteforce, seekhelp)~attribution, data=attobo, FUN=sd)
+aggregate(cbind(combined_method, bruteforce, seekhelp)~attribution, data=attobo, FUN=sd)
 
-aggregate(cbind(combined_method, notetaking, total, convergent_method)~attribution, data=attobo, FUN=mean)
+aggregate(cbind(total, convergent_method)~attribution, data=attobo, FUN=mean)
 
-aggregate(cbind(combined_method, notetaking, total, convergent_method)~attribution, data=attobo, FUN=sd)
+aggregate(cbind(total, convergent_method)~attribution, data=attobo, FUN=sd)
 
 ## Locus, Variability, and Uncontrollability
 attobo %>%
@@ -87,8 +95,8 @@ attobo %>%
             sdUncon = sd(uncontrollability, na.rm = T))
 
 attobo.advice <- attobo %>%
-  select(method, bruteforce, seekhelp, convergent_method,
-         total, expectancy, combined_method, total_method)
+  select(combined_method, bruteforce, seekhelp, convergent_method,
+         total, expectancy, total_method)
 
 attobo.attribution <- attobo %>%
   select(aptout, aptvar, aptuncon, 
@@ -147,6 +155,9 @@ expectancy.freq <- betareg(expectancy ~ attribution, data = attobo, link = "logi
 
 seekhelp.freq <- glm2(seekhelp ~ attribution, data = attobo, family = poisson(link = "log"))
 
+total.freq <- glm2(total ~ attribution, data = attobo, family = poisson(link = "log"))
+
+
 summary(glm2(combined_method ~ attribution_strat, data = attobo, family = poisson(link = "log")))
 
 summary(glm2(convergent_method ~ attribution_effort, data = attobo, family = poisson(link = "log")))
@@ -154,6 +165,8 @@ summary(glm2(convergent_method ~ attribution_effort, data = attobo, family = poi
 summary(glm2(bruteforce ~ attribution_effort, data = attobo, family = poisson(link = "log")))
 
 summary(betareg(expectancy ~ attribution, data = attobo, link = "logit" ))
+
+summary(glm2(total ~ attribution, data = attobo, family = poisson(link = "log")))
 
 Anova(glm2(combined_method ~ attribution_strat, data = attobo, family = poisson(link = "log")))
 
@@ -163,6 +176,8 @@ Anova(glm2(bruteforce ~ attribution_effort, data = attobo, family = poisson(link
 
 Anova(betareg(expectancy ~ attribution, data = attobo, link = "logit" ))
 
+Anova(glm2(total ~ attribution, data = attobo, family = poisson(link = "log")))
+
 ```
 
 
@@ -171,13 +186,13 @@ Anova(betareg(expectancy ~ attribution, data = attobo, link = "logit" ))
 
 # Bayesian Model - method Advice
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 
 strategy <- ifelse(attobo$attribution == "Strategy", 1,0)
 effort <- ifelse(attobo$attribution == "Effort", 1, 0) 
 
-method <- attobo$method
+method <- attobo$combined_method
 
 attobo.datjags <- list(strategy = strategy, effort = effort, method = method, N = nrow(attobo))
 attobo.datjags
@@ -186,7 +201,7 @@ attobo.datjags
 
 ## Model Specification
 
-```{r}
+```{r eval = F}
 
 attobo.model <- function() {
   for(i in 1:N){
@@ -212,15 +227,14 @@ attobo.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo.params <- c("b", "lambda", "error")
 
-attobo.params2 <- c("b")
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 b.inits <- method.freq$coefficients
 
@@ -233,7 +247,7 @@ attobo.inits <- list(attobo.inits1, attobo.inits2,attobo.inits3, attobo.inits4,a
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide', eval = FALSE}
+```{r eval = FALSE}
 
 set.seed(1128)
 attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params, 
@@ -242,50 +256,47 @@ attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.sa
 attobo.fit.upd <- update(attobo.fit, n.iter =1000)
 attobo.fit.upd <- autojags(attobo.fit)
 
-set.seed(1128)
-attobo.fit.convergence <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params2, 
-                n.chains = 5, n.iter = 100000, n.burnin = 10000, model.file = attobo.model)
-
-attobo.fit.upd.convergence <- update(attobo.fit.convergence, n.iter =1000)
-attobo.fit.upd.convergence <- autojags(attobo.fit.convergence)
-
 ```
 
 ```{r eval = FALSE}
 
 attobo.fit.mcmc <- as.mcmc(attobo.fit)
-#save(attobo.fit.mcmc, file = "attobo.method.RData")
-
-attobo.fit.convergence.mcmc <- as.mcmc(attobo.fit.convergence)
-summary(attobo.fit.convergence.mcmc)
+save(attobo.fit.mcmc, file = "attobo.method.mcmc.RData")
 
 ```
 
 ## Convergence Diagnostics
 
 ```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
-                                      
-MCMCtrace(attobo.fit.convergence.mcmc, ind = TRUE, pdf = FALSE )
 
-autocorr.plot(attobo.fit.convergence.mcmc[1], ask = FALSE)
+load("attobo.method.mcmc.RData")
 
-autocorr.plot(attobo.fit.convergence.mcmc[2], ask = FALSE)
+MCMCtrace(attobo.fit.mcmc[,1:4], ind = TRUE, pdf = FALSE )
 
-autocorr.plot(attobo.fit.convergence.mcmc[3], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[1][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[4], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[2][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[5], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[3][,1:4], ask = FALSE)
+
+autocorr.plot(attobo.fit.mcmc[4][,1:4], ask = FALSE)
+
+autocorr.plot(attobo.fit.mcmc[5][,1:4], ask = FALSE)
+
 ```
 
-```{r}
-
+```{r eval = F}
 attobo.out <- as.data.frame(as.matrix(attobo.fit.mcmc))
+## saving data
+save(attobo.out, file = "attobo.method.RData")
+
+```
+
+
+```{r}
+load("attobo.method.RData")
 
 pred.method <- attobo.out[, grep("lambda[", colnames(attobo.out), fixed = T)]
-
-## saving data
-#save(attobo.out, file = "attobo.method.RData")
 
 ## estimated count for each participant
 pred.method <- pred.method[, c(mixedsort(names(pred.method)))]
@@ -315,7 +326,6 @@ quantile(pred.method$diff.3, probs = c(.025, .5, .975))
 ```{r}
 
 error.method <- attobo.out[, grep("error[", colnames(attobo.out), fixed = T)]
-#save(error.method, file = "error.method.RData")
 
 error <- as.vector(unlist(lapply(error.method, mean)))
 mean(error)
@@ -327,7 +337,7 @@ plot(density(error))
 
 ## Expected Counts for each attribution
 
-```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+```{r results='hide'}
 attobo.posterior.coefs <- select(pred.method, `strategy.sim`, `effort.sim`,`aptitude.sim`)
 names(attobo.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
@@ -347,12 +357,9 @@ ggplot(data = attobo.posterior.coefs.long, aes(x = value, y = key)) +
 
 ###############################################################################
 
-
-
-
 # Bayesian Model - bruteforce Advice
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 
 strategy <- ifelse(attobo$attribution == "Strategy", 1,0)
@@ -367,7 +374,7 @@ attobo.datjags
 
 ## Model Specification
 
-```{r}
+```{r eval = F}
 
 attobo.model <- function() {
   for(i in 1:N){
@@ -393,15 +400,13 @@ attobo.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo.params <- c("b", "lambda", "error")
 
-attobo.params2 <- c("b")
-
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 b.inits <- bruteforce.freq$coefficients
 
@@ -414,7 +419,7 @@ attobo.inits <- list(attobo.inits1, attobo.inits2,attobo.inits3, attobo.inits4,a
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide', eval = FALSE}
+```{r eval = FALSE}
 
 set.seed(1128)
 attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params, 
@@ -423,22 +428,12 @@ attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.sa
 attobo.fit.upd <- update(attobo.fit, n.iter =1000)
 attobo.fit.upd <- autojags(attobo.fit)
 
-set.seed(1128)
-attobo.fit.convergence <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params2, 
-                n.chains = 5, n.iter = 100000, n.burnin = 10000, model.file = attobo.model)
-
-attobo.fit.upd.convergence <- update(attobo.fit.convergence, n.iter =1000)
-attobo.fit.upd.convergence <- autojags(attobo.fit.convergence)
-
 ```
 
 ```{r eval = FALSE}
 
 attobo.fit.mcmc <- as.mcmc(attobo.fit)
-#save(attobo.fit.mcmc, file = "attobo.bruteforce.RData")
-
-attobo.fit.convergence.mcmc <- as.mcmc(attobo.fit.convergence)
-summary(attobo.fit.convergence.mcmc)
+save(attobo.fit.mcmc, file = "attobo.bruteforce.mcmc.RData")
 
 ```
 
@@ -446,27 +441,34 @@ summary(attobo.fit.convergence.mcmc)
 
 ```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
                                       
-MCMCtrace(attobo.fit.convergence.mcmc, ind = TRUE, pdf = FALSE )
+load("attobo.bruteforce.mcmc.RData")
 
-autocorr.plot(attobo.fit.convergence.mcmc[1], ask = FALSE)
+MCMCtrace(attobo.fit.mcmc[,1:4], ind = TRUE, pdf = FALSE )
 
-autocorr.plot(attobo.fit.convergence.mcmc[2], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[1][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[3], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[2][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[4], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[3][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[5], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[4][,1:4], ask = FALSE)
+
+autocorr.plot(attobo.fit.mcmc[5][,1:4], ask = FALSE)
+
 ```
+
+```{r eval = F}
+attobo.out <- as.data.frame(as.matrix(attobo.fit.mcmc))
+
+## saving data
+save(attobo.out, file = "attobo.bruteforce.RData")
+
+```
+
 
 ```{r}
 
-attobo.out <- as.data.frame(as.matrix(attobo.fit.mcmc))
-
 pred.bruteforce <- attobo.out[, grep("lambda[", colnames(attobo.out), fixed = T)]
-
-## saving data
-#save(attobo.out, file = "attobo.bruteforce.RData")
 
 ## estimated count for each participant
 pred.bruteforce <- pred.bruteforce[, c(mixedsort(names(pred.bruteforce)))]
@@ -489,7 +491,6 @@ quantile(pred.bruteforce$aptitude.sim, probs = c(.025, .5, .975))
 ```{r}
 
 error.bruteforce <- attobo.out[, grep("error[", colnames(attobo.out), fixed = T)]
-#save(error.bruteforce, file = "error.bruteforce.RData")
 
 error <- as.vector(unlist(lapply(error.bruteforce, mean)))
 mean(error)
@@ -501,7 +502,7 @@ plot(density(error))
 
 ## Expected Counts for each attribution
 
-```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+```{r }
 attobo.posterior.coefs <- select(pred.bruteforce, `strategy.sim`, `effort.sim`,`aptitude.sim`)
 names(attobo.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
@@ -520,20 +521,11 @@ ggplot(data = attobo.posterior.coefs.long, aes(x = value, y = key)) +
 ```
 
 
-```{r}
-attobo.posterior.coefs.sum <- summarize(group_by(attobo.posterior.coefs.long, key),
-                                        median_coef = median(value),
-                                        lower_coef = quantile(value, probs = c(0.025)),
-                                        upper_coef = quantile(value, probs = c(0.975)))
-
-bruteforce.summary <- attobo.posterior.coefs.sum
-```
-
 ###############################################################################
 
 # Bayesian Model - mandatory Advice
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 
 strategy <- ifelse(attobo$attribution == "Strategy", 1,0)
@@ -548,7 +540,7 @@ attobo.datjags
 
 ## Model Specification
 
-```{r}
+```{r eval = F}
 
 attobo.model <- function() {
   for(i in 1:N){
@@ -574,15 +566,14 @@ attobo.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo.params <- c("b", "lambda", "error")
 
-attobo.params2 <- c("b")
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 b.inits <- convergent.freq$coefficients
 
@@ -595,7 +586,7 @@ attobo.inits <- list(attobo.inits1, attobo.inits2,attobo.inits3, attobo.inits4,a
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide', eval = FALSE}
+```{r eval = FALSE}
 
 set.seed(1128)
 attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params, 
@@ -604,22 +595,12 @@ attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.sa
 attobo.fit.upd <- update(attobo.fit, n.iter =1000)
 attobo.fit.upd <- autojags(attobo.fit)
 
-set.seed(1128)
-attobo.fit.convergence <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params2, 
-                n.chains = 5, n.iter = 100000, n.burnin = 10000, model.file = attobo.model)
-
-attobo.fit.upd.convergence <- update(attobo.fit.convergence, n.iter =1000)
-attobo.fit.upd.convergence <- autojags(attobo.fit.convergence)
-
 ```
 
 ```{r eval = FALSE}
 
 attobo.fit.mcmc <- as.mcmc(attobo.fit)
-#save(attobo.fit.mcmc, file = "attobo.convergent.RData")
-
-attobo.fit.convergence.mcmc <- as.mcmc(attobo.fit.convergence)
-summary(attobo.fit.convergence.mcmc)
+save(attobo.fit.mcmc, file = "attobo.convergent.mcmc.RData")
 
 ```
 
@@ -627,28 +608,33 @@ summary(attobo.fit.convergence.mcmc)
 
 ```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
                                       
-MCMCtrace(attobo.fit.convergence.mcmc, ind = TRUE, pdf = FALSE )
+load("attobo.convergent.mcmc.RData")
+MCMCtrace(attobo.fit.mcmc[,1:4], ind = TRUE, pdf = FALSE )
 
-autocorr.plot(attobo.fit.convergence.mcmc[1], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[1][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[2], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[2][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[3], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[3][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[4], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[4][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[5], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[5][,1:4], ask = FALSE)
+
 ```
 
-```{r}
-
-
+```{r eval = F}
 attobo.out <- as.data.frame(as.matrix(attobo.fit.mcmc))
 
-pred.convergent <- attobo.out[, grep("lambda[", colnames(attobo.out), fixed = T)]
-
 ## saving data
-#save(attobo.out, file = "attobo.convergent.RData")
+save(attobo.out, file = "attobo.convergent.RData")
+
+```
+
+
+```{r}
+load("attobo.convergent.RData")
+pred.convergent <- attobo.out[, grep("lambda[", colnames(attobo.out), fixed = T)]
 
 ## estimated count for each participant
 pred.convergent <- pred.convergent[, c(mixedsort(names(pred.convergent)))]
@@ -670,7 +656,6 @@ quantile(pred.convergent$aptitude.sim, probs = c(.025, .5, .975))
 ```{r}
 
 error.convergent <- attobo.out[, grep("error[", colnames(attobo.out), fixed = T)]
-#save(error.convergent, file = "error.convergent.RData")
 
 error <- as.vector(unlist(lapply(error.convergent, mean)))
 mean(error)
@@ -682,7 +667,7 @@ plot(density(error))
 
 ## Expected Counts for each attribution
 
-```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+```{r }
 attobo.posterior.coefs <- select(pred.convergent, `strategy.sim`, `effort.sim`,`aptitude.sim`)
 names(attobo.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
@@ -700,14 +685,6 @@ ggplot(data = attobo.posterior.coefs.long, aes(x = value, y = key)) +
                       alpha = 0.7)
 ```
 
-```{r}
-attobo.posterior.coefs.sum <- summarize(group_by(attobo.posterior.coefs.long, key),
-                                        median_coef = median(value),
-                                        lower_coef = quantile(value, probs = c(0.025)),
-                                        upper_coef = quantile(value, probs = c(0.975)))
-
-convergent.summary <- attobo.posterior.coefs.sum
-```
 
 ###############################################################################
 
@@ -716,7 +693,7 @@ convergent.summary <- attobo.posterior.coefs.sum
 
 # Bayesian Model - seekhelp Advice
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 
 strategy <- ifelse(attobo$attribution == "Strategy", 1,0)
@@ -731,7 +708,7 @@ attobo.datjags
 
 ## Model Specification
 
-```{r}
+```{r eval = F}
 
 attobo.model <- function() {
   for(i in 1:N){
@@ -757,15 +734,13 @@ attobo.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo.params <- c("b", "lambda", "error")
 
-attobo.params2 <- c("b")
-
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 b.inits <- seekhelp.freq$coefficients
 
@@ -778,7 +753,7 @@ attobo.inits <- list(attobo.inits1, attobo.inits2,attobo.inits3, attobo.inits4,a
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide', eval = FALSE}
+```{r eval = FALSE}
 
 set.seed(1128)
 attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params, 
@@ -787,22 +762,13 @@ attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.sa
 attobo.fit.upd <- update(attobo.fit, n.iter =1000)
 attobo.fit.upd <- autojags(attobo.fit)
 
-set.seed(1128)
-attobo.fit.convergence <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params2, 
-                n.chains = 5, n.iter = 100000, n.burnin = 10000, model.file = attobo.model)
-
-attobo.fit.upd.convergence <- update(attobo.fit.convergence, n.iter =1000)
-attobo.fit.upd.convergence <- autojags(attobo.fit.convergence)
-
 ```
 
 ```{r eval = FALSE}
 
 attobo.fit.mcmc <- as.mcmc(attobo.fit)
-#save(attobo.fit.mcmc, file = "attobo.seekhelp.RData")
+save(attobo.fit.mcmc, file = "attobo.seekhelp.mcmc.RData")
 
-attobo.fit.convergence.mcmc <- as.mcmc(attobo.fit.convergence)
-summary(attobo.fit.convergence.mcmc)
 
 ```
 
@@ -810,27 +776,34 @@ summary(attobo.fit.convergence.mcmc)
 
 ```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
                                       
-MCMCtrace(attobo.fit.convergence.mcmc, ind = TRUE, pdf = FALSE )
+load("attobo.seekhelp.mcmc.RData")
 
-autocorr.plot(attobo.fit.convergence.mcmc[1], ask = FALSE)
+MCMCtrace(attobo.fit.mcmc[,1:4], ind = TRUE, pdf = FALSE )
 
-autocorr.plot(attobo.fit.convergence.mcmc[2], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[1][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[3], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[2][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[4], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[3][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[5], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[4][,1:4], ask = FALSE)
+
+autocorr.plot(attobo.fit.mcmc[5][,1:4], ask = FALSE)
+
 ```
 
-```{r}
-
+```{r eval = F}
 attobo.out <- as.data.frame(as.matrix(attobo.fit.mcmc))
 
-pred.seekhelp <- attobo.out[, grep("lambda[", colnames(attobo.out), fixed = T)]
-
 ## saving data
-#save(attobo.out, file = "attobo.seekhelp.RData")
+save(attobo.out, file = "attobo.seekhelp.RData")
+
+```
+
+
+```{r}
+load("attobo.seekhelp.RData")
+pred.seekhelp <- attobo.out[, grep("lambda[", colnames(attobo.out), fixed = T)]
 
 ## estimated count for each participant
 pred.seekhelp <- pred.seekhelp[, c(mixedsort(names(pred.seekhelp)))]
@@ -856,7 +829,6 @@ quantile(pred.seekhelp$aptitude.sim, probs = c(.025, .5, .975))
 ```{r}
 
 error.seekhelp <- attobo.out[, grep("error[", colnames(attobo.out), fixed = T)]
-#save(error.seekhelp, file = "error.seekhelp.RData")
 
 error <- as.vector(unlist(lapply(error.seekhelp, mean)))
 
@@ -870,7 +842,7 @@ plot(density(error))
 
 ## Expected Counts for each attribution
 
-```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+```{r }
 attobo.posterior.coefs <- select(pred.seekhelp, `strategy.sim`, `effort.sim`,`aptitude.sim`)
 names(attobo.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
@@ -892,32 +864,22 @@ ggplot(data = attobo.posterior.coefs.long, aes(x = value, y = key)) +
 
 
 
-# expectancy
+# Expectancy
 
 ## Bayesian Model - expectancy
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
-library(R2jags)
-library(rjags)
-library(runjags)
-library("lattice")
-library("superdiag")
-library(gtools)
-
-library(bayestestR) 
-library("ggmcmc")
-
+```{r eval = F}
 
 strategy <- ifelse(attobo$attribution == "Strategy", 1,0)
 effort <- ifelse(attobo$attribution == "Effort", 1, 0) 
 
-attobo.datjags <- list(strategy = strategy, effort = effort, N = nrow(attobo), expectancy = expectancy)
+attobo.datjags <- list(strategy = strategy, effort = effort, N = nrow(attobo), expectancy = attobo$expectancy)
 attobo.datjags
 ```
 
 ## Model Specification
 
-```{r}
+```{r eval = F}
 
 attobo.model <- function() {
   
@@ -951,15 +913,13 @@ attobo.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo.params <- c("b", "mu", "error")
 
-attobo.params2 <- c("b")
-
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 b.inits <- expectancy.freq$coefficients$mean
 
@@ -972,7 +932,7 @@ attobo.inits <- list(attobo.inits1, attobo.inits2,attobo.inits3, attobo.inits4,a
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide', eval = FALSE}
+```{r eval = FALSE}
 
 set.seed(1128)
 attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params, 
@@ -986,14 +946,14 @@ attobo.fit.upd <- autojags(attobo.fit)
 ```{r eval = FALSE}
 
 attobo.fit.mcmc <- as.mcmc(attobo.fit)
-#save(attobo.fit.mcmc, file = "attobo.expectancy.RData")
+save(attobo.fit.mcmc, file = "attobo.expectancy.mcmc.RData")
 
 ```
 
 ## Convergence Diagnostics
 
 ```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
-
+load("attobo.expectancy.mcmc.RData")
 MCMCtrace(attobo.fit.mcmc[, 1:4] , ind = TRUE, pdf = FALSE )
 
 autocorr.plot(attobo.fit.mcmc[1][, 1:4], ask = FALSE)
@@ -1008,13 +968,17 @@ autocorr.plot(attobo.fit.mcmc[5][, 1:4], ask = FALSE)
 ```
 
 ```{r}
-
 attobo.out <- as.data.frame(as.matrix(attobo.fit.mcmc))
 
-pred.expectancy <- attobo.out[, grep("mu[", colnames(attobo.out), fixed = T)]
-
 ## saving data
-#save(attobo.out, file = "attobo.expectancy.RData")
+save(attobo.out, file = "attobo.expectancy.RData")
+
+```
+
+
+```{r}
+load("attobo.expectancy.RData")
+pred.expectancy <- attobo.out[, grep("mu[", colnames(attobo.out), fixed = T)]
 
 ## estimated count for each participant
 pred.expectancy <- pred.expectancy[, c(mixedsort(names(pred.expectancy)))]
@@ -1039,8 +1003,6 @@ mean(pred.expectancy$aptitude.sim)
 ```{r}
 
 error.expectancy <- attobo.out[, grep("error[", colnames(attobo.out), fixed = T)]
-#save(error.expectancy, file = "error.expectancy.RData")
-
 
 error <- as.vector(unlist(lapply(error.expectancy, mean)))
 mean(error)
@@ -1052,7 +1014,7 @@ plot(density(error))
 
 ## Expected Counts for each attribution
 
-```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+```{r }
 attobo.posterior.coefs <- select(pred.expectancy, `strategy.sim`, `effort.sim`,`aptitude.sim`)
 names(attobo.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
@@ -1073,9 +1035,9 @@ ggplot(data = attobo.posterior.coefs.long, aes(x = value, y = key)) +
 
 
 
-# Bayesian Model - total Advice
+# Bayesian Model - Total Advice
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 strategy <- ifelse(attobo$attribution == "Strategy", 1,0)
 effort <- ifelse(attobo$attribution == "Effort", 1, 0) 
@@ -1089,7 +1051,7 @@ attobo.datjags
 
 ## Model Specification
 
-```{r}
+```{r eval = F}
 
 attobo.model <- function() {
   for(i in 1:N){
@@ -1115,15 +1077,13 @@ attobo.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo.params <- c("b", "lambda", "error")
 
-attobo.params2 <- c("b")
-
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 b.inits <- total.freq$coefficients
 
@@ -1136,7 +1096,7 @@ attobo.inits <- list(attobo.inits1, attobo.inits2,attobo.inits3, attobo.inits4,a
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide', eval = FALSE}
+```{r eval = FALSE}
 
 set.seed(1128)
 attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params, 
@@ -1145,50 +1105,45 @@ attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.sa
 attobo.fit.upd <- update(attobo.fit, n.iter =1000)
 attobo.fit.upd <- autojags(attobo.fit)
 
-set.seed(1128)
-attobo.fit.convergence <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params2, 
-                n.chains = 5, n.iter = 100000, n.burnin = 10000, model.file = attobo.model)
-
-attobo.fit.upd.convergence <- update(attobo.fit.convergence, n.iter =1000)
-attobo.fit.upd.convergence <- autojags(attobo.fit.convergence)
-
 ```
 
 ```{r eval = FALSE}
 
 attobo.fit.mcmc <- as.mcmc(attobo.fit)
-#save(attobo.fit.mcmc, file = "attobo.total.RData")
+save(attobo.fit.mcmc, file = "attobo.total.mcmc.RData")
 
-attobo.fit.convergence.mcmc <- as.mcmc(attobo.fit.convergence)
-summary(attobo.fit.convergence.mcmc)
 
 ```
 
 ## Convergence Diagnostics
 
 ```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
-                                      
-MCMCtrace(attobo.fit.convergence.mcmc, ind = TRUE, pdf = FALSE )
+load("attobo.total.mcmc.RData")
+MCMCtrace(attobo.fit.mcmc[,1:4], ind = TRUE, pdf = FALSE )
 
-autocorr.plot(attobo.fit.convergence.mcmc[1], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[1][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[2], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[2][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[3], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[3][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[4], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[4][,1:4], ask = FALSE)
 
-autocorr.plot(attobo.fit.convergence.mcmc[5], ask = FALSE)
+autocorr.plot(attobo.fit.mcmc[5][,1:4], ask = FALSE)
+
+```
+
+```{r eval = F}
+attobo.out <- as.data.frame(as.matrix(attobo.fit.mcmc))
+
+## saving data
+save(attobo.out, file = "attobo.total.RData")
+
 ```
 
 ```{r}
-
-attobo.out <- as.data.frame(as.matrix(attobo.fit.mcmc))
-
+load("attobo.total.RData")
 pred.total <- attobo.out[, grep("lambda[", colnames(attobo.out), fixed = T)]
-
-## saving data
-#save(attobo.out, file = "attobo.total.RData")
 
 ## estimated count for each participant
 pred.total <- pred.total[, c(mixedsort(names(pred.total)))]
@@ -1218,7 +1173,6 @@ quantile(pred.total$diff.3, probs = c(.025, .5, .975))
 ```{r}
 
 error.total <- attobo.out[, grep("error[", colnames(attobo.out), fixed = T)]
-#save(error.total, file = "error.total.RData")
 
 error <- as.vector(unlist(lapply(error.total, mean)))
 mean(error)
@@ -1230,7 +1184,7 @@ plot(density(error))
 
 ## Expected Counts for each attribution
 
-```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
+```{r}
 attobo.posterior.coefs <- select(pred.total, `strategy.sim`, `effort.sim`,`aptitude.sim`)
 names(attobo.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
@@ -1249,181 +1203,4 @@ ggplot(data = attobo.posterior.coefs.long, aes(x = value, y = key)) +
 ```
 
 ###############################################################################
-
-
-# Bayesian Model - combined method Advice
-
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
-
-strategy <- ifelse(attobo$attribution == "Strategy", 1,0)
-effort <- ifelse(attobo$attribution == "Effort", 1, 0) 
-
-combined <- attobo$combined_method
-
-attobo.datjags <- list(strategy = strategy, effort = effort, combined = combined, N = nrow(attobo))
-attobo.datjags
-
-```
-
-## Model Specification
-
-```{r}
-
-attobo.model <- function() {
-  for(i in 1:N){
-    # lambda is mean and variance of the poisson distribution
-    combined[i] ~ dpois(lambda[i])
-    log(lambda[i]) <- b[1] + b[2] * effort[i] + b[3] * strategy[i]
-  }
-  
-  #priors
-  b[1] ~ dnorm(0, 0.0025)
-  b[2] ~ dnorm(0, 0.0025)
-  b[3] ~ dnorm(0, 0.0025)
-  
-  for (i in 1:N){
-    
-    error[i] <- lambda[i] - combined[i]
-  
-  }
-  
-  
-}
-
-```
-
-
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
-
-attobo.params <- c("b", "lambda", "error")
-
-attobo.params2 <- c("b")
-
-```
-
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
-
-b.inits <- combined.freq$coefficients
-
-attobo.inits1 <-  list( "b" = b.inits)
-attobo.inits2 <- list( "b" = rep(0, 3) )
-attobo.inits3 <- list( "b" = rep(1, 3) )
-attobo.inits4 <- list( "b" = rep(-1, 3) )
-attobo.inits5 <- list( "b" = rep(2, 3) )
-attobo.inits <- list(attobo.inits1, attobo.inits2,attobo.inits3, attobo.inits4,attobo.inits5)
-
-```
-
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide', eval = FALSE}
-
-set.seed(1128)
-attobo.fit <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params, 
-                n.chains = 5, n.iter = 100000, n.burnin = 10000, model.file = attobo.model)
-
-attobo.fit.upd <- update(attobo.fit, n.iter =1000)
-attobo.fit.upd <- autojags(attobo.fit)
-
-set.seed(1128)
-attobo.fit.convergence <- jags(data = attobo.datjags, inits = attobo.inits, parameters.to.save = attobo.params2, 
-                n.chains = 5, n.iter = 100000, n.burnin = 10000, model.file = attobo.model)
-
-attobo.fit.upd.convergence <- update(attobo.fit.convergence, n.iter =1000)
-attobo.fit.upd.convergence <- autojags(attobo.fit.convergence)
-
-```
-
-```{r eval = FALSE}
-
-attobo.fit.mcmc <- as.mcmc(attobo.fit)
-#save(attobo.fit.mcmc, file = "attobo.combined.RData")
-
-attobo.fit.convergence.mcmc <- as.mcmc(attobo.fit.convergence)
-summary(attobo.fit.convergence.mcmc)
-
-```
-
-## Convergence Diagnostics
-
-```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
-                                      
-MCMCtrace(attobo.fit.convergence.mcmc, ind = TRUE, pdf = FALSE )
-
-autocorr.plot(attobo.fit.convergence.mcmc[1], ask = FALSE)
-
-autocorr.plot(attobo.fit.convergence.mcmc[2], ask = FALSE)
-
-autocorr.plot(attobo.fit.convergence.mcmc[3], ask = FALSE)
-
-autocorr.plot(attobo.fit.convergence.mcmc[4], ask = FALSE)
-
-autocorr.plot(attobo.fit.convergence.mcmc[5], ask = FALSE)
-```
-
-```{r}
-
-attobo.out <- as.data.frame(as.matrix(attobo.fit.mcmc))
-
-pred.combined <- attobo.out[, grep("lambda[", colnames(attobo.out), fixed = T)]
-
-## saving data
-#save(attobo.out, file = "attobo.combined.RData")
-
-## estimated count for each participant
-pred.combined <- pred.combined[, c(mixedsort(names(pred.combined)))]
-
-strategy.id <- as.numeric(unlist(which(attobo$attribution == "Strategy")))
-effort.id <- as.numeric(unlist(which(attobo$attribution == "Effort")))
-aptitude.id <- as.numeric(unlist(which(attobo$attribution == "Aptitude")))
-
-pred.combined$strategy.sim <- apply(pred.combined[, strategy.id], 1, mean)
-pred.combined$effort.sim <- apply(pred.combined[, effort.id], 1, mean)
-pred.combined$aptitude.sim <- apply(pred.combined[, aptitude.id], 1, mean)
-
-quantile(pred.combined$strategy.sim, probs = c(.025, .5, .975))
-quantile(pred.combined$effort.sim, probs = c(.025, .5, .975))
-quantile(pred.combined$aptitude.sim, probs = c(.025, .5, .975))
-
-```
-
-```{r}
-
-error.combined <- attobo.out[, grep("error[", colnames(attobo.out), fixed = T)]
-#save(error.combined, file = "error.combined.RData")
-
-error <- as.vector(unlist(lapply(error.combined, mean)))
-mean(error)
-plot(density(error))
-
-```
-
-
-
-## Expected Counts for each attribution
-
-```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
-attobo.posterior.coefs <- select(pred.combined, `strategy.sim`, `effort.sim`,`aptitude.sim`)
-names(attobo.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
-
-attobo.posterior.coefs.long <- gather(attobo.posterior.coefs)
-#head(attobo.posterior.coefs.long)
-
-
-```
-
-```{r}
-library("ggridges")
-ggplot(data = attobo.posterior.coefs.long, aes(x = value, y = key)) + 
-  stat_density_ridges(quantile_lines = TRUE, 
-                      quantiles = c(0.025, 0.5, 0.975), 
-                      alpha = 0.7)
-```
-
-```{r}
-attobo.posterior.coefs.sum <- summarize(group_by(attobo.posterior.coefs.long, key),
-                                        median_coef = median(value),
-                                        lower_coef = quantile(value, probs = c(0.025)),
-                                        upper_coef = quantile(value, probs = c(0.975)))
-
-combined.summary <- attobo.posterior.coefs.sum
-```
 
