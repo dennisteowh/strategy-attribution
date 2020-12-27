@@ -1,12 +1,15 @@
 ---
 title: "Study 2 Analysis"
 author: "Dennis Teo"
-output:   
+output:
   html_document:
-    toc: true
+    theme: readable
+    toc: yes
     toc_depth: 3
-    number_sections: true
-    theme: united
+    toc_float: true
+    highlight: tango
+    df_print: paged
+fontsize: 18pt
     
 ---
 
@@ -14,7 +17,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message=FALSE)
 ```
 
-```{r echo=FALSE, warning=FALSE, message=FALSE, results='hide', eval=TRUE}
+```{r results='hide', eval=TRUE}
 
 library(psych)
 library(ggplot2)
@@ -31,6 +34,7 @@ library(tibble)
 library(car)
 library(olsrr)
 library(pwr)
+library(car)
 
 library(R2jags)
 library(rjags)
@@ -48,7 +52,7 @@ library(MCMCvis)
 
 ```
 
-```{r echo=FALSE, warning=FALSE, message=FALSE, results='hide', eval=TRUE}
+```{r eval=TRUE}
 
 library(readr)
 attobo2 <- read_csv("attobo2_clean.csv")
@@ -57,7 +61,7 @@ source('Useful Code V2.R', echo=FALSE)
 
 ```
 
-```{r echo=FALSE, warning=FALSE, message=FALSE, results='hide', eval=TRUE}
+```{r  results='hide', eval=TRUE}
 
 # failure$scenario <- as.factor(failure$scenario)
 attobo2$scenario <- as.factor(attobo2$scenario)
@@ -98,7 +102,7 @@ sum(attobo2$redo_den == attobo2$method_val)/length(attobo2$redo_val)
 
 # Descriptive Stats
 
-```{r echo=TRUE, warning=FALSE, message=FALSE, eval=TRUE}
+```{r eval=TRUE}
 ## Sample Breakdown
 group_by(attobo2, attribution) %>%
   summarise(n())
@@ -177,7 +181,7 @@ sd(attobo2$age)
 
 ```
 
-```{r  echo=TRUE, warning=FALSE, message=FALSE, eval=TRUE}
+```{r eval=TRUE}
 
 
 attobo2.advice <- attobo2 %>%
@@ -267,12 +271,12 @@ valence <- ifelse(valence == 2, 1 ,0)
 method <- c(attobo2$method, c(1,1,1,1,1,1) )
 
 attobo2.datjags <- list(strategy = strategy, effort = effort, method = method, N = length(strategy), valence = valence)
-attobo2.datjags
+
 ```
 
 ## Model Specification
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.model <- function() {
   for(i in 1:N){
@@ -309,13 +313,13 @@ attobo2.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.params <- c("b",  "p", "error")
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.inits1 <-  list( "b" = rep(1, 6))
 attobo2.inits2 <- list( "b" = rep(0, 6))
@@ -324,7 +328,7 @@ attobo2.inits <- list(attobo2.inits1, attobo2.inits2, attobo2.inits3)
 attobo2.inits
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide',eval=FALSE}
+```{r eval=FALSE}
 
 set.seed(1128)
 attobo2.fit <- jags(data = attobo2.datjags, inits = attobo2.inits, parameters.to.save = attobo2.params, 
@@ -336,12 +340,11 @@ attobo2.fit.upd <- autojags(attobo2.fit)
 
 ```
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.fit.mcmc <- as.mcmc(attobo2.fit)
 
-#save(attobo2.fit.mcmc, file = "attobo2.method.mcmc.RData")
-
+save(attobo2.fit.mcmc, file = "attobo2.method.mcmc.RData")
 
 summary(attobo2.fit.mcmc)
 
@@ -351,8 +354,9 @@ summary(attobo2.fit.mcmc)
 
 ## Convergence Diagnostics
 
-```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center', eval = FALSE}
-                                      
+```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
+load("attobo2.method.mcmc.RData")
+
 MCMCtrace(attobo2.fit.mcmc[, 1:7], ind = TRUE, pdf = FALSE )
 
 autocorr.plot(attobo2.fit.mcmc[1][, 1:7], ask = FALSE)
@@ -362,90 +366,89 @@ autocorr.plot(attobo2.fit.mcmc[2][, 1:7], ask = FALSE)
 autocorr.plot(attobo2.fit.mcmc[3][, 1:7], ask = FALSE)
 ```
 
-```{r echo = FALSE, warning = FALSE, message=FALSE}
+```{r eval = F}
 
 
 attobo2.out.pp <- as.data.frame(as.matrix(attobo2.fit.mcmc))
 
 ## saving data
-#save(attobo2.out.pp, file = "attobo2.method.pp.RData")
+save(attobo2.out.pp, file = "attobo2.method.pp.RData")
 
 
 ```
 
-```{r echo = FALSE, warning = FALSE, message=FALSE}
+```{r }
 id <- 1:298
 
 attobo2.index <- data.frame(attribution, valence, id)
 
-attobo2.index 
 ```
 
-```{r warning = FALSE, message=FALSE}
-
+```{r }
+load("attobo2.method.pp.RData")
 
 pred.method <- attobo2.out.pp[, grep("p[", colnames(attobo2.out.pp), fixed = T)]
 pred.method <- pred.method[, c(mixedsort(names(pred.method)))]
 
 strategy.success.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 3 & valence == 1) 
+
+strategy.success.index <- strategy.success.index[, "id"]
 
 
 strategy.success <- pred.method[, strategy.success.index]
 
-strategy.success.method.report <- collapse.report(strategy.success)
+strategy.success.method.report <- as.report(apply.mean(strategy.success))
 
 strategy.fail.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 3 & valence == 0) 
+
+strategy.fail.index <- strategy.fail.index[, "id"]
 
 strategy.fail <- pred.method[, strategy.fail.index]
 
-strategy.fail.method.report <- collapse.report(strategy.fail)
+strategy.fail.method.report <- as.report(apply.mean(strategy.fail))
 strategy.fail.method.report
 
 effort.success.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 2 & valence == 1)
+
+effort.success.index <- effort.success.index[, "id"]
 
 effort.success <- pred.method[, effort.success.index]
 
-effort.success.method.report <- collapse.report(effort.success)
+effort.success.method.report <- as.report(apply.mean(effort.success))
 effort.success.method.report
 
 effort.fail.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 2 & valence == 0) 
+
+effort.fail.index <- effort.fail.index[, "id"]
 
 effort.fail <- pred.method[, effort.fail.index]
 
-effort.fail.method.report <- collapse.report(effort.fail)
+effort.fail.method.report <- as.report(apply.mean(effort.fail))
 effort.fail.method.report
 
 
 aptitude.success.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 1 & valence == 1) 
+
+aptitude.success.index <- aptitude.success.index[,"id"]
 
 aptitude.success <- pred.method[, aptitude.success.index]
 
-aptitude.success.method.report <- collapse.report(aptitude.success)
+aptitude.success.method.report <- as.report(apply.mean(aptitude.success))
 aptitude.success.method.report
 
 aptitude.fail.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 1 & valence == 0) 
+
+aptitude.fail.index <- aptitude.fail.index[, "id"] 
 
 aptitude.fail <- pred.method[, aptitude.fail.index]
 
-aptitude.fail.method.report <- collapse.report(aptitude.fail)
+aptitude.fail.method.report <- as.report(apply.mean(aptitude.fail))
 aptitude.fail.method.report
 
 
@@ -454,8 +457,6 @@ aptitude.fail.method.report
 ```{r}
 
 error.method <- attobo2.out.pp[, grep("error[", colnames(attobo2.out.pp), fixed = T)]
-#save(error.method, file = "error.method.RData")
-
 
 error <- as.vector(unlist(lapply(error.method, mean)))
 mean(error)
@@ -485,7 +486,7 @@ quantile(pred.method$aptitude.sim, probs = c(.025, .5, .975))
 ```
 
 ```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
-attobo2.posterior.coefs <- select(pred.method, `strategy.sim`, `effort.sim`,`aptitude.sim`)
+attobo2.posterior.coefs <- pred.method[, c("strategy.sim", "effort.sim","aptitude.sim")]
 names(attobo2.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
 attobo2.posterior.coefs.long <- gather(attobo2.posterior.coefs)
@@ -504,25 +505,17 @@ ggplot(data = attobo2.posterior.coefs.long, aes(x = value, y = key)) +
 
 
 ```{r}
-library(car)
+aptitude.fail.mean <- apply.mean(aptitude.fail) 
 
-aptitude.fail.mean <- collapse.mean(aptitude.fail) %>%
-  select(mean)
+aptitude.success.mean <- apply.mean(aptitude.success)
 
-aptitude.success.mean <- collapse.mean(aptitude.success) %>%
-  select(mean)
+effort.fail.mean <- apply.mean(effort.fail) 
 
-effort.fail.mean <- collapse.mean(effort.fail) %>%
-  select(mean)
+effort.success.mean <- apply.mean(effort.success)
 
-effort.success.mean <- collapse.mean(effort.success) %>%
-  select(mean)
+strategy.fail.mean <- apply.mean(strategy.fail)
 
-strategy.fail.mean <- collapse.mean(strategy.fail) %>%
-  select(mean)
-
-strategy.success.mean <- collapse.mean(strategy.success) %>%
-  select(mean)
+strategy.success.mean <- apply.mean(strategy.success) 
 
 attobo2.pp <- cbind(aptitude.fail.mean, aptitude.success.mean, effort.fail.mean, effort.success.mean, strategy.fail.mean, strategy.success.mean)
 
@@ -531,7 +524,7 @@ attobo2.pp <- cbind(aptitude.fail.mean, aptitude.success.mean, effort.fail.mean,
 colnames(attobo2.pp) <- c("pp1", "pp2", "pp3", "pp4", "pp5", "pp6")
 
 # gather - all columns must have diff names
-attobo2.plot <- gather(attobo2.pp)
+attobo2.plot <- gather(as.data.frame(attobo2.pp))
 
 attobo2.plot$key2 <- attobo2.plot$key
 
@@ -557,7 +550,7 @@ method.summary <- attobo2.posterior.coefs.sum
 
 # Bayesian Estimate - Bruteforce Advice
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 attribution <- c(attobo2$attribution, c(3, 3, 2, 2, 1, 1))
 
 strategy <- ifelse(attribution == 3, 1,0)
@@ -576,7 +569,7 @@ attobo2.datjags
 
 ## Model Specification
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.model <- function() {
   for(i in 1:N){
@@ -613,13 +606,13 @@ attobo2.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.params <- c("b",  "p", "error")
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.inits1 <-  list( "b" = rep(1, 6))
 attobo2.inits2 <- list( "b" = rep(0, 6))
@@ -628,7 +621,7 @@ attobo2.inits <- list(attobo2.inits1, attobo2.inits2, attobo2.inits3)
 attobo2.inits
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide',eval=FALSE}
+```{r eval=FALSE}
 
 set.seed(1128)
 attobo2.fit <- jags(data = attobo2.datjags, inits = attobo2.inits, parameters.to.save = attobo2.params, 
@@ -640,11 +633,11 @@ attobo2.fit.upd <- autojags(attobo2.fit)
 
 ```
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.fit.mcmc <- as.mcmc(attobo2.fit)
 
-#save(attobo2.fit.mcmc, file = "attobo2.bruteforce.mcmc.RData")
+save(attobo2.fit.mcmc, file = "attobo2.bruteforce.mcmc.RData")
 
 summary(attobo2.fit.mcmc)
 
@@ -654,8 +647,9 @@ summary(attobo2.fit.mcmc)
 
 ## Convergence Diagnostics
 
-```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center', eval = FALSE}
-                                      
+```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
+                      
+load("attobo2.bruteforce.mcmc.RData")                
 MCMCtrace(attobo2.fit.mcmc[, 1:7], ind = TRUE, pdf = FALSE )
 
 autocorr.plot(attobo2.fit.mcmc[1][, 1:7], ask = FALSE)
@@ -665,89 +659,90 @@ autocorr.plot(attobo2.fit.mcmc[2][, 1:7], ask = FALSE)
 autocorr.plot(attobo2.fit.mcmc[3][, 1:7], ask = FALSE)
 ```
 
-```{r echo = FALSE, warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.out.pp <- as.data.frame(as.matrix(attobo2.fit.mcmc))
 
 ## saving data
-#save(attobo2.out.pp, file = "attobo2.bruteforce.pp.RData")
+save(attobo2.out.pp, file = "attobo2.bruteforce.pp.RData")
 
 
 ```
 
-```{r echo = FALSE, warning = FALSE, message=FALSE}
+```{r }
 id <- 1:298
 
 attobo2.index <- data.frame(attribution, valence, id)
 
-attobo2.index 
 ```
 
 ```{r warning = FALSE, message=FALSE}
 
 
+load("attobo2.bruteforce.pp.RData")
+
 pred.bruteforce <- attobo2.out.pp[, grep("p[", colnames(attobo2.out.pp), fixed = T)]
 pred.bruteforce <- pred.bruteforce[, c(mixedsort(names(pred.bruteforce)))]
 
 strategy.success.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 3 & valence == 1) 
+
+strategy.success.index <- strategy.success.index[, "id"]
 
 
 strategy.success <- pred.bruteforce[, strategy.success.index]
 
-strategy.success.bruteforce.report <- collapse.report(strategy.success)
+strategy.success.bruteforce.report <- as.report(apply.mean(strategy.success))
 
 strategy.fail.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 3 & valence == 0) 
+
+strategy.fail.index <- strategy.fail.index[, "id"]
 
 strategy.fail <- pred.bruteforce[, strategy.fail.index]
 
-strategy.fail.bruteforce.report <- collapse.report(strategy.fail)
+strategy.fail.bruteforce.report <- as.report(apply.mean(strategy.fail))
 strategy.fail.bruteforce.report
 
 effort.success.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 2 & valence == 1)
+
+effort.success.index <- effort.success.index[, "id"]
 
 effort.success <- pred.bruteforce[, effort.success.index]
 
-effort.success.bruteforce.report <- collapse.report(effort.success)
+effort.success.bruteforce.report <- as.report(apply.mean(effort.success))
 effort.success.bruteforce.report
 
 effort.fail.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 2 & valence == 0) 
+
+effort.fail.index <- effort.fail.index[, "id"]
 
 effort.fail <- pred.bruteforce[, effort.fail.index]
 
-effort.fail.bruteforce.report <- collapse.report(effort.fail)
+effort.fail.bruteforce.report <- as.report(apply.mean(effort.fail))
 effort.fail.bruteforce.report
 
 
 aptitude.success.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 1 & valence == 1) 
+
+aptitude.success.index <- aptitude.success.index[,"id"]
 
 aptitude.success <- pred.bruteforce[, aptitude.success.index]
 
-aptitude.success.bruteforce.report <- collapse.report(aptitude.success)
+aptitude.success.bruteforce.report <- as.report(apply.mean(aptitude.success))
 aptitude.success.bruteforce.report
 
 aptitude.fail.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 1 & valence == 0) 
+
+aptitude.fail.index <- aptitude.fail.index[, "id"] 
 
 aptitude.fail <- pred.bruteforce[, aptitude.fail.index]
 
-aptitude.fail.bruteforce.report <- collapse.report(aptitude.fail)
+aptitude.fail.bruteforce.report <- as.report(apply.mean(aptitude.fail))
 aptitude.fail.bruteforce.report
 
 
@@ -756,8 +751,6 @@ aptitude.fail.bruteforce.report
 ```{r}
 
 error.bruteforce <- attobo2.out.pp[, grep("error[", colnames(attobo2.out.pp), fixed = T)]
-#save(error.bruteforce, file = "error.bruteforce.RData")
-
 
 error <- as.vector(unlist(lapply(error.bruteforce, mean)))
 mean(error)
@@ -786,8 +779,8 @@ quantile(pred.bruteforce$aptitude.sim, probs = c(.025, .5, .975))
 
 ```
 
-```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
-attobo2.posterior.coefs <- select(pred.bruteforce, `strategy.sim`, `effort.sim`,`aptitude.sim`)
+```{r  results='hide'}
+attobo2.posterior.coefs <- pred.bruteforce[, c("strategy.sim", "effort.sim","aptitude.sim")]
 names(attobo2.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
 attobo2.posterior.coefs.long <- gather(attobo2.posterior.coefs)
@@ -805,25 +798,17 @@ ggplot(data = attobo2.posterior.coefs.long, aes(x = value, y = key)) +
 ```
 
 ```{r}
-library(car)
+aptitude.fail.mean <- apply.mean(aptitude.fail) 
 
-aptitude.fail.mean <- collapse.mean(aptitude.fail) %>%
-  select(mean)
+aptitude.success.mean <- apply.mean(aptitude.success)
 
-aptitude.success.mean <- collapse.mean(aptitude.success) %>%
-  select(mean)
+effort.fail.mean <- apply.mean(effort.fail) 
 
-effort.fail.mean <- collapse.mean(effort.fail) %>%
-  select(mean)
+effort.success.mean <- apply.mean(effort.success)
 
-effort.success.mean <- collapse.mean(effort.success) %>%
-  select(mean)
+strategy.fail.mean <- apply.mean(strategy.fail)
 
-strategy.fail.mean <- collapse.mean(strategy.fail) %>%
-  select(mean)
-
-strategy.success.mean <- collapse.mean(strategy.success) %>%
-  select(mean)
+strategy.success.mean <- apply.mean(strategy.success) 
 
 attobo2.pp <- cbind(aptitude.fail.mean, aptitude.success.mean, effort.fail.mean, effort.success.mean, strategy.fail.mean, strategy.success.mean)
 
@@ -832,7 +817,7 @@ attobo2.pp <- cbind(aptitude.fail.mean, aptitude.success.mean, effort.fail.mean,
 colnames(attobo2.pp) <- c("pp1", "pp2", "pp3", "pp4", "pp5", "pp6")
 
 # gather - all columns must have diff names
-attobo2.plot <- gather(attobo2.pp)
+attobo2.plot <- gather(as.data.frame(attobo2.pp))
 
 attobo2.plot$key2 <- attobo2.plot$key
 
@@ -840,14 +825,14 @@ attobo2.plot$key <- recode(attobo2.plot$key, "'pp1' = 'Aptitude'; 'pp2' = 'Aptit
 
 attobo2.plot$key2 <- recode(attobo2.plot$key2, "'pp1' = 'Failure'; 'pp2' = 'Success'; 'pp3' = 'Failure'; 'pp4' = 'Success'; 'pp5' = 'Failure'; 'pp6' = 'Success'")
 
-colnames(attobo2.plot) <- c("Attribution", "Pr(Method Advice)", "Outcome Valence")
+colnames(attobo2.plot) <- c("Attribution", "Pr(Bruteforce Advice)", "Outcome Valence")
 
 #head(attobo2.plot)
 
 attobo2.posterior.coefs.sum <- summarize(group_by(attobo2.plot, Attribution, `Outcome Valence`),
-                                        mean_coef = mean(`Pr(Method Advice)`),
-                                        lower_coef = quantile(`Pr(Method Advice)`, probs = c(0.025)),
-                                        upper_coef = quantile(`Pr(Method Advice)`, probs = c(0.975)))
+                                        mean_coef = mean(`Pr(Bruteforce Advice)`),
+                                        lower_coef = quantile(`Pr(Bruteforce Advice)`, probs = c(0.025)),
+                                        upper_coef = quantile(`Pr(Bruteforce Advice)`, probs = c(0.975)))
 #head(attobo2.posterior.coefs.sum)
 
 brute.summary <- attobo2.posterior.coefs.sum
@@ -859,7 +844,7 @@ brute.summary <- attobo2.posterior.coefs.sum
 
 # Bayesian Estimate - Redo Advice
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 attribution <- c(attobo2$attribution, c(3, 3, 2, 2, 1, 1))
 
 strategy <- ifelse(attribution == 3, 1,0)
@@ -878,7 +863,7 @@ attobo2.datjags
 
 ## Model Specification
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.model <- function() {
   for(i in 1:N){
@@ -915,13 +900,13 @@ attobo2.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.params <- c("b",  "p", "error")
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.inits1 <-  list( "b" = rep(1, 6))
 attobo2.inits2 <- list( "b" = rep(0, 6))
@@ -930,7 +915,7 @@ attobo2.inits <- list(attobo2.inits1, attobo2.inits2, attobo2.inits3)
 attobo2.inits
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide',eval=FALSE}
+```{r eval=FALSE}
 
 set.seed(1128)
 attobo2.fit <- jags(data = attobo2.datjags, inits = attobo2.inits, parameters.to.save = attobo2.params, 
@@ -942,11 +927,11 @@ attobo2.fit.upd <- autojags(attobo2.fit)
 
 ```
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.fit.mcmc <- as.mcmc(attobo2.fit)
 
-#save(attobo2.fit.mcmc, file = "attobo2.redo.mcmc.RData")
+save(attobo2.fit.mcmc, file = "attobo2.redo.mcmc.RData")
 
 summary(attobo2.fit.mcmc)
 
@@ -956,8 +941,9 @@ summary(attobo2.fit.mcmc)
 
 ## Convergence Diagnostics
 
-```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center', eval = FALSE}
-                                      
+```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
+load("attobo2.redo.mcmc.RData")              
+                        
 MCMCtrace(attobo2.fit.mcmc[, 1:7], ind = TRUE, pdf = FALSE )
 
 autocorr.plot(attobo2.fit.mcmc[1][, 1:7], ask = FALSE)
@@ -967,98 +953,96 @@ autocorr.plot(attobo2.fit.mcmc[2][, 1:7], ask = FALSE)
 autocorr.plot(attobo2.fit.mcmc[3][, 1:7], ask = FALSE)
 ```
 
-```{r echo = FALSE, warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.out.pp <- as.data.frame(as.matrix(attobo2.fit.mcmc))
 
 ## saving data
-#save(attobo2.out.pp, file = "attobo2.redo.pp.RData")
+save(attobo2.out.pp, file = "attobo2.redo.pp.RData")
 
 
 ```
 
-```{r echo = FALSE, warning = FALSE, message=FALSE}
+```{r }
 id <- 1:298
 
 attobo2.index <- data.frame(attribution, valence, id)
 
-attobo2.index 
 ```
 
-```{r warning = FALSE, message=FALSE}
+```{r }
 
+load("attobo2.redo.pp.RData")
 
 pred.redo <- attobo2.out.pp[, grep("p[", colnames(attobo2.out.pp), fixed = T)]
 pred.redo <- pred.redo[, c(mixedsort(names(pred.redo)))]
 
 strategy.success.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 3 & valence == 1) 
+
+strategy.success.index <- strategy.success.index[, "id"]
 
 
 strategy.success <- pred.redo[, strategy.success.index]
 
-strategy.success.redo.report <- collapse.report(strategy.success)
+strategy.success.redo.report <- as.report(apply.mean(strategy.success))
 
 strategy.fail.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 3 & valence == 0) 
+
+strategy.fail.index <- strategy.fail.index[, "id"]
 
 strategy.fail <- pred.redo[, strategy.fail.index]
 
-strategy.fail.redo.report <- collapse.report(strategy.fail)
+strategy.fail.redo.report <- as.report(apply.mean(strategy.fail))
 strategy.fail.redo.report
 
 effort.success.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 2 & valence == 1)
+
+effort.success.index <- effort.success.index[, "id"]
 
 effort.success <- pred.redo[, effort.success.index]
 
-effort.success.redo.report <- collapse.report(effort.success)
+effort.success.redo.report <- as.report(apply.mean(effort.success))
 effort.success.redo.report
 
 effort.fail.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 2 & valence == 0) 
+
+effort.fail.index <- effort.fail.index[, "id"]
 
 effort.fail <- pred.redo[, effort.fail.index]
 
-effort.fail.redo.report <- collapse.report(effort.fail)
+effort.fail.redo.report <- as.report(apply.mean(effort.fail))
 effort.fail.redo.report
 
 
 aptitude.success.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 1 & valence == 1) 
+
+aptitude.success.index <- aptitude.success.index[,"id"]
 
 aptitude.success <- pred.redo[, aptitude.success.index]
 
-aptitude.success.redo.report <- collapse.report(aptitude.success)
+aptitude.success.redo.report <- as.report(apply.mean(aptitude.success))
 aptitude.success.redo.report
 
 aptitude.fail.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 1 & valence == 0) 
+
+aptitude.fail.index <- aptitude.fail.index[, "id"] 
 
 aptitude.fail <- pred.redo[, aptitude.fail.index]
 
-aptitude.fail.redo.report <- collapse.report(aptitude.fail)
+aptitude.fail.redo.report <- as.report(apply.mean(aptitude.fail))
 aptitude.fail.redo.report
-
 
 ```
 
 ```{r}
 
 error.redo <- attobo2.out.pp[, grep("error[", colnames(attobo2.out.pp), fixed = T)]
-#save(error.redo, file = "error.redo.RData")
 
 
 error <- as.vector(unlist(lapply(error.redo, mean)))
@@ -1089,7 +1073,7 @@ quantile(pred.redo$aptitude.sim, probs = c(.025, .5, .975))
 ```
 
 ```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
-attobo2.posterior.coefs <- select(pred.redo, `strategy.sim`, `effort.sim`,`aptitude.sim`)
+attobo2.posterior.coefs <- pred.redo[,c("strategy.sim", "effort.sim","aptitude.sim")]
 names(attobo2.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
 attobo2.posterior.coefs.long <- gather(attobo2.posterior.coefs)
@@ -1107,25 +1091,17 @@ ggplot(data = attobo2.posterior.coefs.long, aes(x = value, y = key)) +
 ```
 
 ```{r}
-library(car)
+aptitude.fail.mean <- apply.mean(aptitude.fail) 
 
-aptitude.fail.mean <- collapse.mean(aptitude.fail) %>%
-  select(mean)
+aptitude.success.mean <- apply.mean(aptitude.success)
 
-aptitude.success.mean <- collapse.mean(aptitude.success) %>%
-  select(mean)
+effort.fail.mean <- apply.mean(effort.fail) 
 
-effort.fail.mean <- collapse.mean(effort.fail) %>%
-  select(mean)
+effort.success.mean <- apply.mean(effort.success)
 
-effort.success.mean <- collapse.mean(effort.success) %>%
-  select(mean)
+strategy.fail.mean <- apply.mean(strategy.fail)
 
-strategy.fail.mean <- collapse.mean(strategy.fail) %>%
-  select(mean)
-
-strategy.success.mean <- collapse.mean(strategy.success) %>%
-  select(mean)
+strategy.success.mean <- apply.mean(strategy.success) 
 
 attobo2.pp <- cbind(aptitude.fail.mean, aptitude.success.mean, effort.fail.mean, effort.success.mean, strategy.fail.mean, strategy.success.mean)
 
@@ -1134,7 +1110,7 @@ attobo2.pp <- cbind(aptitude.fail.mean, aptitude.success.mean, effort.fail.mean,
 colnames(attobo2.pp) <- c("pp1", "pp2", "pp3", "pp4", "pp5", "pp6")
 
 # gather - all columns must have diff names
-attobo2.plot <- gather(attobo2.pp)
+attobo2.plot <- gather(as.data.frame(attobo2.pp))
 
 attobo2.plot$key2 <- attobo2.plot$key
 
@@ -1142,14 +1118,14 @@ attobo2.plot$key <- recode(attobo2.plot$key, "'pp1' = 'Aptitude'; 'pp2' = 'Aptit
 
 attobo2.plot$key2 <- recode(attobo2.plot$key2, "'pp1' = 'Failure'; 'pp2' = 'Success'; 'pp3' = 'Failure'; 'pp4' = 'Success'; 'pp5' = 'Failure'; 'pp6' = 'Success'")
 
-colnames(attobo2.plot) <- c("Attribution", "Pr(Method Advice)", "Outcome Valence")
+colnames(attobo2.plot) <- c("Attribution", "Pr(Redo Advice)", "Outcome Valence")
 
 #head(attobo2.plot)
 
 attobo2.posterior.coefs.sum <- summarize(group_by(attobo2.plot, Attribution, `Outcome Valence`),
-                                        mean_coef = mean(`Pr(Method Advice)`),
-                                        lower_coef = quantile(`Pr(Method Advice)`, probs = c(0.025)),
-                                        upper_coef = quantile(`Pr(Method Advice)`, probs = c(0.975)))
+                                        mean_coef = mean(`Pr(Redo Advice)`),
+                                        lower_coef = quantile(`Pr(Redo Advice)`, probs = c(0.025)),
+                                        upper_coef = quantile(`Pr(Redo Advice)`, probs = c(0.975)))
 #head(attobo2.posterior.coefs.sum)
 
 redo.summary <- attobo2.posterior.coefs.sum
@@ -1160,7 +1136,7 @@ redo.summary <- attobo2.posterior.coefs.sum
 
 # Bayesian Estimate - Redo with feedback Advice
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 attribution <- c(attobo2$attribution, c(3, 3, 2, 2, 1, 1))
 
 strategy <- ifelse(attribution == 3, 1,0)
@@ -1179,7 +1155,7 @@ attobo2.datjags
 
 ## Model Specification
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.model <- function() {
   for(i in 1:N){
@@ -1216,13 +1192,13 @@ attobo2.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.params <- c("b",  "p", "error")
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.inits1 <-  list( "b" = rep(1, 6))
 attobo2.inits2 <- list( "b" = rep(0, 6))
@@ -1231,7 +1207,7 @@ attobo2.inits <- list(attobo2.inits1, attobo2.inits2, attobo2.inits3)
 attobo2.inits
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide',eval=FALSE}
+```{r eval = F}
 
 set.seed(1128)
 attobo2.fit <- jags(data = attobo2.datjags, inits = attobo2.inits, parameters.to.save = attobo2.params, 
@@ -1243,11 +1219,11 @@ attobo2.fit.upd <- autojags(attobo2.fit)
 
 ```
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.fit.mcmc <- as.mcmc(attobo2.fit)
 
-#save(attobo2.fit.mcmc, file = "attobo2.redo.feedback.mcmc.RData")
+save(attobo2.fit.mcmc, file = "attobo2.redo.feedback.mcmc.RData")
 
 summary(attobo2.fit.mcmc)
 
@@ -1257,8 +1233,9 @@ summary(attobo2.fit.mcmc)
 
 ## Convergence Diagnostics
 
-```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center', eval = FALSE}
-                                      
+```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
+load("attobo2.redo.feedback.mcmc.RData")
+                                    
 MCMCtrace(attobo2.fit.mcmc[, 1:7], ind = TRUE, pdf = FALSE )
 
 autocorr.plot(attobo2.fit.mcmc[1][, 1:7], ask = FALSE)
@@ -1268,89 +1245,90 @@ autocorr.plot(attobo2.fit.mcmc[2][, 1:7], ask = FALSE)
 autocorr.plot(attobo2.fit.mcmc[3][, 1:7], ask = FALSE)
 ```
 
-```{r echo = FALSE, warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.out.pp <- as.data.frame(as.matrix(as.mcmc(attobo2.fit)))
 
 ## saving data
-#save(attobo2.out.pp, file = "attobo2.redo.feedback.pp.RData")
+save(attobo2.out.pp, file = "attobo2.redo.feedback.pp.RData")
 
 
 ```
 
-```{r echo = FALSE, warning = FALSE, message=FALSE}
+```{r }
 id <- 1:298
 
 attobo2.index <- data.frame(attribution, valence, id)
 
-attobo2.index 
 ```
 
-```{r warning = FALSE, message=FALSE}
+```{r }
 
+
+load("attobo2.redo.feedback.pp.RData")
 
 pred.redo.feedback <- attobo2.out.pp[, grep("p[", colnames(attobo2.out.pp), fixed = T)]
 pred.redo.feedback <- pred.redo.feedback[, c(mixedsort(names(pred.redo.feedback)))]
 
 strategy.success.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 3 & valence == 1) 
+
+strategy.success.index <- strategy.success.index[, "id"]
 
 
 strategy.success <- pred.redo.feedback[, strategy.success.index]
 
-strategy.success.redo.feedback.report <- collapse.report(strategy.success)
+strategy.success.redo.feedback.report <- as.report(apply.mean(strategy.success))
 
 strategy.fail.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 3 & valence == 0) 
+
+strategy.fail.index <- strategy.fail.index[, "id"]
 
 strategy.fail <- pred.redo.feedback[, strategy.fail.index]
 
-strategy.fail.redo.feedback.report <- collapse.report(strategy.fail)
+strategy.fail.redo.feedback.report <- as.report(apply.mean(strategy.fail))
 strategy.fail.redo.feedback.report
 
 effort.success.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 2 & valence == 1)
+
+effort.success.index <- effort.success.index[, "id"]
 
 effort.success <- pred.redo.feedback[, effort.success.index]
 
-effort.success.redo.feedback.report <- collapse.report(effort.success)
+effort.success.redo.feedback.report <- as.report(apply.mean(effort.success))
 effort.success.redo.feedback.report
 
 effort.fail.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 2 & valence == 0) 
+
+effort.fail.index <- effort.fail.index[, "id"]
 
 effort.fail <- pred.redo.feedback[, effort.fail.index]
 
-effort.fail.redo.feedback.report <- collapse.report(effort.fail)
+effort.fail.redo.feedback.report <- as.report(apply.mean(effort.fail))
 effort.fail.redo.feedback.report
 
 
 aptitude.success.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 1 & valence == 1) 
+
+aptitude.success.index <- aptitude.success.index[,"id"]
 
 aptitude.success <- pred.redo.feedback[, aptitude.success.index]
 
-aptitude.success.redo.feedback.report <- collapse.report(aptitude.success)
+aptitude.success.redo.feedback.report <- as.report(apply.mean(aptitude.success))
 aptitude.success.redo.feedback.report
 
 aptitude.fail.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 1 & valence == 0) 
+
+aptitude.fail.index <- aptitude.fail.index[, "id"] 
 
 aptitude.fail <- pred.redo.feedback[, aptitude.fail.index]
 
-aptitude.fail.redo.feedback.report <- collapse.report(aptitude.fail)
+aptitude.fail.redo.feedback.report <- as.report(apply.mean(aptitude.fail))
 aptitude.fail.redo.feedback.report
 
 
@@ -1359,8 +1337,6 @@ aptitude.fail.redo.feedback.report
 ```{r}
 
 error.redo.feedback <- attobo2.out.pp[, grep("error[", colnames(attobo2.out.pp), fixed = T)]
-#save(error.redo.feedback, file = "error.redo.feedback.RData")
-
 
 error <- as.vector(unlist(lapply(error.redo.feedback, mean)))
 mean(error)
@@ -1389,8 +1365,8 @@ quantile(pred.redo.feedback$aptitude.sim, probs = c(.025, .5, .975))
 
 ```
 
-```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
-attobo2.posterior.coefs <- select(pred.redo.feedback, `strategy.sim`, `effort.sim`,`aptitude.sim`)
+```{r }
+attobo2.posterior.coefs <- pred.redo.feedback[,c("strategy.sim", "effort.sim","aptitude.sim")]
 names(attobo2.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
 attobo2.posterior.coefs.long <- gather(attobo2.posterior.coefs)
@@ -1413,7 +1389,7 @@ ggplot(data = attobo2.posterior.coefs.long, aes(x = value, y = key)) +
 
 # Bayesian Estimate - Redo no feedback Advice
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 attribution <- c(attobo2$attribution, c(3, 3, 2, 2, 1, 1))
 
 strategy <- ifelse(attribution == 3, 1,0)
@@ -1432,7 +1408,7 @@ attobo2.datjags
 
 ## Model Specification
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.model <- function() {
   for(i in 1:N){
@@ -1469,13 +1445,13 @@ attobo2.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.params <- c("b",  "p", "error")
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.inits1 <-  list( "b" = rep(1, 6))
 attobo2.inits2 <- list( "b" = rep(0, 6))
@@ -1484,7 +1460,7 @@ attobo2.inits <- list(attobo2.inits1, attobo2.inits2, attobo2.inits3)
 attobo2.inits
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide',eval=FALSE}
+```{r eval = F}
 
 set.seed(1128)
 attobo2.fit <- jags(data = attobo2.datjags, inits = attobo2.inits, parameters.to.save = attobo2.params, 
@@ -1496,11 +1472,11 @@ attobo2.fit.upd <- autojags(attobo2.fit)
 
 ```
 
-```{r warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.fit.mcmc <- as.mcmc(attobo2.fit)
 
-#save(attobo2.fit.mcmc, file = "attobo2.redo.nofeedback.mcmc.RData")
+save(attobo2.fit.mcmc, file = "attobo2.redo.nofeedback.mcmc.RData")
 
 
 summary(attobo2.fit.mcmc)
@@ -1511,8 +1487,8 @@ summary(attobo2.fit.mcmc)
 
 ## Convergence Diagnostics
 
-```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center', eval = FALSE}
-                                      
+```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
+load("attobo2.redo.nofeedback.mcmc.RData")                     
 MCMCtrace(attobo2.fit.mcmc[, 1:7], ind = TRUE, pdf = FALSE )
 
 autocorr.plot(attobo2.fit.mcmc[1][, 1:7], ask = FALSE)
@@ -1522,99 +1498,97 @@ autocorr.plot(attobo2.fit.mcmc[2][, 1:7], ask = FALSE)
 autocorr.plot(attobo2.fit.mcmc[3][, 1:7], ask = FALSE)
 ```
 
-```{r echo = FALSE, warning = FALSE, message=FALSE}
+```{r eval = F}
 
 attobo2.out.pp <- as.data.frame(as.matrix(as.mcmc(attobo2.fit)))
 
 ## saving data
-#save(attobo2.out.pp, file = "attobo2.redo.nofeedback.pp.RData")
+save(attobo2.out.pp, file = "attobo2.redo.nofeedback.pp.RData")
 
 
 ```
 
-```{r echo = FALSE, warning = FALSE, message=FALSE}
+```{r }
 id <- 1:298
 
 attobo2.index <- data.frame(attribution, valence, id)
 
-attobo2.index 
 ```
 
-```{r warning = FALSE, message=FALSE}
+```{r }
 
+
+load("attobo2.redo.nofeedback.pp.RData")
 
 pred.redo.nofeedback <- attobo2.out.pp[, grep("p[", colnames(attobo2.out.pp), fixed = T)]
 pred.redo.nofeedback <- pred.redo.nofeedback[, c(mixedsort(names(pred.redo.nofeedback)))]
 
 strategy.success.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 3 & valence == 1) 
+
+strategy.success.index <- strategy.success.index[, "id"]
 
 
 strategy.success <- pred.redo.nofeedback[, strategy.success.index]
 
-strategy.success.redo.nofeedback.report <- collapse.report(strategy.success)
+strategy.success.redo.nofeedback.report <- as.report(apply.mean(strategy.success))
 
 strategy.fail.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 3 & valence == 0) 
+
+strategy.fail.index <- strategy.fail.index[, "id"]
 
 strategy.fail <- pred.redo.nofeedback[, strategy.fail.index]
 
-strategy.fail.redo.nofeedback.report <- collapse.report(strategy.fail)
+strategy.fail.redo.nofeedback.report <- as.report(apply.mean(strategy.fail))
 strategy.fail.redo.nofeedback.report
 
 effort.success.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 2 & valence == 1)
+
+effort.success.index <- effort.success.index[, "id"]
 
 effort.success <- pred.redo.nofeedback[, effort.success.index]
 
-effort.success.redo.nofeedback.report <- collapse.report(effort.success)
+effort.success.redo.nofeedback.report <- as.report(apply.mean(effort.success))
 effort.success.redo.nofeedback.report
 
 effort.fail.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 2 & valence == 0) 
+
+effort.fail.index <- effort.fail.index[, "id"]
 
 effort.fail <- pred.redo.nofeedback[, effort.fail.index]
 
-effort.fail.redo.nofeedback.report <- collapse.report(effort.fail)
+effort.fail.redo.nofeedback.report <- as.report(apply.mean(effort.fail))
 effort.fail.redo.nofeedback.report
 
 
 aptitude.success.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 1) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 1 & valence == 1) 
+
+aptitude.success.index <- aptitude.success.index[,"id"]
 
 aptitude.success <- pred.redo.nofeedback[, aptitude.success.index]
 
-aptitude.success.redo.nofeedback.report <- collapse.report(aptitude.success)
+aptitude.success.redo.nofeedback.report <- as.report(apply.mean(aptitude.success))
 aptitude.success.redo.nofeedback.report
 
 aptitude.fail.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 0) %>%
-  select(id) %>%
-  pull()
+  filter(attribution == 1 & valence == 0) 
+
+aptitude.fail.index <- aptitude.fail.index[, "id"] 
 
 aptitude.fail <- pred.redo.nofeedback[, aptitude.fail.index]
 
-aptitude.fail.redo.nofeedback.report <- collapse.report(aptitude.fail)
+aptitude.fail.redo.nofeedback.report <- as.report(apply.mean(aptitude.fail))
 aptitude.fail.redo.nofeedback.report
-
 
 ```
 
 ```{r}
 
 error.redo.nofeedback <- attobo2.out.pp[, grep("error[", colnames(attobo2.out.pp), fixed = T)]
-#save(error.redo.nofeedback, file = "error.redo.nofeedback.RData")
-
 
 error <- as.vector(unlist(lapply(error.redo.nofeedback, mean)))
 mean(error)
@@ -1644,7 +1618,7 @@ quantile(pred.redo.nofeedback$aptitude.sim, probs = c(.025, .5, .975))
 ```
 
 ```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
-attobo2.posterior.coefs <- select(pred.redo.nofeedback, `strategy.sim`, `effort.sim`,`aptitude.sim`)
+attobo2.posterior.coefs <- pred.redo.nofeedback[,c("strategy.sim", "effort.sim","aptitude.sim")]
 names(attobo2.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
 attobo2.posterior.coefs.long <- gather(attobo2.posterior.coefs)
@@ -1661,21 +1635,11 @@ ggplot(data = attobo2.posterior.coefs.long, aes(x = value, y = key)) +
                       alpha = 0.7)
 ```
 
-# expectancy
+# Expectancy
 
-## Bayesian Model - expectancy
+## Bayesian Model - Expectancy
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
-library(R2jags)
-library(rjags)
-library(runjags)
-library("lattice")
-library("superdiag")
-library(gtools)
-
-library(bayestestR) 
-library("ggmcmc")
-
+```{r }
 
 strategy <- ifelse(attobo2$attribution == "Strategy", 1,0)
 effort <- ifelse(attobo2$attribution == "Effort", 1, 0) 
@@ -1691,12 +1655,11 @@ attribution <- c(attobo2$attribution)
 
 
 attobo2.datjags <- list(strategy = strategy, effort = effort, N = nrow(attobo2), expectancy = expectancy, valence = valence)
-attobo2.datjags
 ```
 
 ## Model Specification
 
-```{r}
+```{r eval = F}
 
 attobo2.model <- function() {
   
@@ -1730,15 +1693,13 @@ attobo2.model <- function() {
 ```
 
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.params <- c("b", "mu", "error")
 
-attobo2.params2 <- c("b")
-
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide'}
+```{r eval = F}
 
 attobo2.inits1 <-  list( "b" = rep(-1,6), "phiinv" = 1)
 attobo2.inits2 <- list( "b" = rep(0, 6) , "phiinv" =2 )
@@ -1747,7 +1708,7 @@ attobo2.inits <- list(attobo2.inits1, attobo2.inits2,attobo2.inits3)
 
 ```
 
-```{r echo=FALSE, warning = FALSE, message = FALSE, results='hide', eval = FALSE}
+```{r eval = FALSE}
 
 set.seed(1128)
 attobo2.fit <- jags(data = attobo2.datjags, inits = attobo2.inits, parameters.to.save = attobo2.params, 
@@ -1761,14 +1722,14 @@ attobo2.fit.upd <- autojags(attobo2.fit)
 ```{r eval = FALSE}
 
 attobo2.fit.mcmc <- as.mcmc(attobo2.fit)
-#save(attobo2.fit.mcmc, file = "attobo2.expectancy.RData")
+save(attobo2.fit.mcmc, file = "attobo2.expectancy.mcmc.RData")
 
 ```
 
 ## Convergence Diagnostics
 
 ```{r figure = TRUE, fig.width=6, fig.height=6, fig.align='center'}
-                                      
+load("attobo2.expectancy.mcmc.RData")                                      
 MCMCtrace(attobo2.fit.mcmc[, 1:7] , ind = TRUE, pdf = FALSE )
 
 autocorr.plot(attobo2.fit.mcmc[1][,1:7], ask = FALSE)
@@ -1780,22 +1741,147 @@ autocorr.plot(attobo2.fit.mcmc[3][,1:7], ask = FALSE)
 ```
 
 
-```{r echo = FALSE, warning = FALSE, message=FALSE}
+```{r }
 id <- 1:292
 
 attobo2.index <- data.frame(attribution, valence, id)
 
 ```
 
+```{r eval = F}
+attobo2.out <- as.data.frame(as.matrix(attobo2.fit.mcmc))
+
+save(attobo2.out, file = "attobo2.expectancy.pp.RData")
+```
+
+
+```{r}
+load("attobo2.expectancy.pp.RData")
+
+error.expectancy <- attobo2.out[, grep("error[", colnames(attobo2.out), fixed = T)]
+
+error <- as.vector(unlist(lapply(error.expectancy, mean)))
+mean(error)
+plot(density(error))
+
+```
+
+```{r warning = FALSE, message=FALSE}
+
+
+pred.expectancy <- attobo2.out.pp[, grep("p[", colnames(attobo2.out.pp), fixed = T)]
+pred.expectancy <- pred.expectancy[, c(mixedsort(names(pred.expectancy)))]
+
+strategy.success.index <- attobo2.index %>%
+  filter(attribution == 3 & valence == 1) 
+
+strategy.success.index <- strategy.success.index[, "id"]
+
+
+strategy.success <- pred.expectancy[, strategy.success.index]
+
+strategy.success.expectancy.report <- as.report(apply.mean(strategy.success))
+
+strategy.fail.index <- attobo2.index %>%
+  filter(attribution == 3 & valence == 0) 
+
+strategy.fail.index <- strategy.fail.index[, "id"]
+
+strategy.fail <- pred.expectancy[, strategy.fail.index]
+
+strategy.fail.expectancy.report <- as.report(apply.mean(strategy.fail))
+strategy.fail.expectancy.report
+
+effort.success.index <- attobo2.index %>%
+  filter(attribution == 2 & valence == 1)
+
+effort.success.index <- effort.success.index[, "id"]
+
+effort.success <- pred.expectancy[, effort.success.index]
+
+effort.success.expectancy.report <- as.report(apply.mean(effort.success))
+effort.success.expectancy.report
+
+effort.fail.index <- attobo2.index %>%
+  filter(attribution == 2 & valence == 0) 
+
+effort.fail.index <- effort.fail.index[, "id"]
+
+effort.fail <- pred.expectancy[, effort.fail.index]
+
+effort.fail.expectancy.report <- as.report(apply.mean(effort.fail))
+effort.fail.expectancy.report
+
+
+aptitude.success.index <- attobo2.index %>%
+  filter(attribution == 1 & valence == 1) 
+
+aptitude.success.index <- aptitude.success.index[,"id"]
+
+aptitude.success <- pred.expectancy[, aptitude.success.index]
+
+aptitude.success.expectancy.report <- as.report(apply.mean(aptitude.success))
+aptitude.success.expectancy.report
+
+aptitude.fail.index <- attobo2.index %>%
+  filter(attribution == 1 & valence == 0) 
+
+aptitude.fail.index <- aptitude.fail.index[, "id"] 
+
+aptitude.fail <- pred.expectancy[, aptitude.fail.index]
+
+aptitude.fail.expectancy.report <- as.report(apply.mean(aptitude.fail))
+aptitude.fail.expectancy.report
+
+
+```
 
 ```{r}
 
-attobo2.out <- as.data.frame(as.matrix(attobo2.fit.mcmc))
+aptitude.fail.mean <- apply.mean(aptitude.fail) 
+
+aptitude.success.mean <- apply.mean(aptitude.success)
+
+effort.fail.mean <- apply.mean(effort.fail) 
+
+effort.success.mean <- apply.mean(effort.success)
+
+strategy.fail.mean <- apply.mean(strategy.fail)
+
+strategy.success.mean <- apply.mean(strategy.success) 
+
+attobo2.pp <- cbind(aptitude.fail.mean, aptitude.success.mean, effort.fail.mean, effort.success.mean, strategy.fail.mean, strategy.success.mean)
+
+#str(attobo2.pp)
+
+colnames(attobo2.pp) <- c("pp1", "pp2", "pp3", "pp4", "pp5", "pp6")
+
+# gather - all columns must have diff names
+attobo2.plot <- gather(as.data.frame(attobo2.pp))
+
+attobo2.plot$key2 <- attobo2.plot$key
+
+attobo2.plot$key <- recode(attobo2.plot$key, "'pp1' = 'Aptitude'; 'pp2' = 'Aptitude'; 'pp3' = 'Effort'; 'pp4' = 'Effort'; 'pp5' = 'Strategy'; 'pp6' = 'Strategy'")
+
+attobo2.plot$key2 <- recode(attobo2.plot$key2, "'pp1' = 'Failure'; 'pp2' = 'Success'; 'pp3' = 'Failure'; 'pp4' = 'Success'; 'pp5' = 'Failure'; 'pp6' = 'Success'")
+
+colnames(attobo2.plot) <- c("Attribution", "Expectancy", "Outcome Valence")
+
+#head(attobo2.plot)
+
+attobo2.posterior.coefs.sum <- summarize(group_by(attobo2.plot, Attribution, `Outcome Valence`),
+                                        mean_coef = mean(`Expectancy`),
+                                        lower_coef = quantile(`Expectancy`, probs = c(0.025)),
+                                        upper_coef = quantile(`Expectancy`, probs = c(0.975)))
+#head(attobo2.posterior.coefs.sum)
+
+expectancy.summary <- attobo2.posterior.coefs.sum
+
+```
+
+```{r}
 
 pred.expectancy <- attobo2.out[, grep("mu[", colnames(attobo2.out), fixed = T)]
-
-## saving data
-#save(attobo.out, file = "attobo.expectancy.RData")
 
 ## estimated count for each participant
 pred.expectancy <- pred.expectancy[, c(mixedsort(names(pred.expectancy)))]
@@ -1832,138 +1918,10 @@ mean(pred.expectancy$aptitude.sim, probs = c(.025, .5, .975))
 
 ```
 
-```{r}
-
-error.expectancy <- attobo2.out[, grep("error[", colnames(attobo2.out), fixed = T)]
-#save(error.expectancy, file = "error.expectancy.RData")
-
-error <- as.vector(unlist(lapply(error.expectancy, mean)))
-mean(error)
-plot(density(error))
-
-```
-
-```{r warning = FALSE, message=FALSE}
-
-strategy.success.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 1) %>%
-  select(id) %>%
-  pull()
-
-
-strategy.success <- pred.expectancy[, strategy.success.index]
-
-strategy.success.expectancy.report <- collapse.report(strategy.success)
-strategy.success.expectancy.report
-
-strategy.fail.index <- attobo2.index %>%
-  filter(attribution == 3 & valence == 0) %>%
-  select(id) %>%
-  pull()
-
-strategy.fail <- pred.expectancy[, strategy.fail.index]
-
-strategy.fail.expectancy.report <- collapse.report(strategy.fail)
-strategy.fail.expectancy.report
-
-effort.success.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 1) %>%
-  select(id) %>%
-  pull()
-
-effort.success <- pred.expectancy[, effort.success.index]
-
-effort.success.expectancy.report <- collapse.report(effort.success)
-effort.success.expectancy.report
-
-effort.fail.index <- attobo2.index %>%
-  filter(attribution == 2 & valence == 0) %>%
-  select(id) %>%
-  pull()
-
-effort.fail <- pred.expectancy[, effort.fail.index]
-
-effort.fail.expectancy.report <- collapse.report(effort.fail)
-effort.fail.expectancy.report
-
-
-aptitude.success.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 1) %>%
-  select(id) %>%
-  pull()
-
-aptitude.success <- pred.expectancy[, aptitude.success.index]
-
-aptitude.success.expectancy.report <- collapse.report(aptitude.success)
-aptitude.success.expectancy.report
-
-aptitude.fail.index <- attobo2.index %>%
-  filter(attribution == 1 & valence == 0) %>%
-  select(id) %>%
-  pull()
-
-aptitude.fail <- pred.expectancy[, aptitude.fail.index]
-
-aptitude.fail.expectancy.report <- collapse.report(aptitude.fail)
-aptitude.fail.expectancy.report
-
-
-```
-
-```{r}
-library(car)
-
-aptitude.fail.mean <- collapse.mean(aptitude.fail) %>%
-  select(mean)
-
-aptitude.success.mean <- collapse.mean(aptitude.success) %>%
-  select(mean)
-
-effort.fail.mean <- collapse.mean(effort.fail) %>%
-  select(mean)
-
-effort.success.mean <- collapse.mean(effort.success) %>%
-  select(mean)
-
-strategy.fail.mean <- collapse.mean(strategy.fail) %>%
-  select(mean)
-
-strategy.success.mean <- collapse.mean(strategy.success) %>%
-  select(mean)
-
-attobo2.pp <- cbind(aptitude.fail.mean, aptitude.success.mean, effort.fail.mean, effort.success.mean, strategy.fail.mean, strategy.success.mean)
-
-#str(attobo2.pp)
-
-colnames(attobo2.pp) <- c("pp1", "pp2", "pp3", "pp4", "pp5", "pp6")
-
-# gather - all columns must have diff names
-attobo2.plot <- gather(attobo2.pp)
-
-attobo2.plot$key2 <- attobo2.plot$key
-
-attobo2.plot$key <- recode(attobo2.plot$key, "'pp1' = 'Aptitude'; 'pp2' = 'Aptitude'; 'pp3' = 'Effort'; 'pp4' = 'Effort'; 'pp5' = 'Strategy'; 'pp6' = 'Strategy'")
-
-attobo2.plot$key2 <- recode(attobo2.plot$key2, "'pp1' = 'Failure'; 'pp2' = 'Success'; 'pp3' = 'Failure'; 'pp4' = 'Success'; 'pp5' = 'Failure'; 'pp6' = 'Success'")
-
-colnames(attobo2.plot) <- c("Attribution", "Pr(Method Advice)", "Outcome Valence")
-
-#head(attobo2.plot)
-
-attobo2.posterior.coefs.sum <- summarize(group_by(attobo2.plot, Attribution, `Outcome Valence`),
-                                        mean_coef = mean(`Pr(Method Advice)`),
-                                        lower_coef = quantile(`Pr(Method Advice)`, probs = c(0.025)),
-                                        upper_coef = quantile(`Pr(Method Advice)`, probs = c(0.975)))
-#head(attobo2.posterior.coefs.sum)
-
-expectancy.summary <- attobo2.posterior.coefs.sum
-
-```
-
 ## Expected Counts for each attribution
 
-```{r echo = FALSE, warning=FALSE, message=FALSE, results='hide'}
-attobo2.posterior.coefs <- select(pred.expectancy, `strategy.sim`, `effort.sim`,`aptitude.sim`)
+```{r }
+attobo2.posterior.coefs <- pred.expectancy[,c("strategy.sim", "effort.sim","aptitude.sim")]
 names(attobo2.posterior.coefs) <- c("Strategy", "Effort", "Aptitude")
 
 attobo2.posterior.coefs.long <- gather(attobo2.posterior.coefs)
@@ -1987,7 +1945,7 @@ ggplot(data = attobo2.posterior.coefs.long, aes(x = value, y = key)) +
 
 # Consolidating Reports
 
-```{r}
+```{r eval = F}
 
 attobo2.posteriors <- list(
   strategy.success.method.report=strategy.success.method.report, 
@@ -2021,7 +1979,7 @@ attobo2.posteriors <- list(
 
 attobo2.posteriors
 
-#save(attobo2.posteriors, file = "attobo2.posteriors.RData")
+save(attobo2.posteriors, file = "attobo2.posteriors.RData")
 
 
 ```
