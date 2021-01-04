@@ -84,11 +84,74 @@ ggplot(data = gather(attobo3.demo, factor_key = TRUE), aes(x = factor(value))) +
 
 ```
 
+# Power Simulation
+
+```{r}
+
+library(extraDistr)
+
+N <- 300
+
+c2.out <- c()
+c3.out <- c()
+
+for (i in 1:3000){
+  
+# assume that effect size is roughly .15 probability
+# then choice distribution should be roughly (.25,.4,.1,.25)
+
+choices <- rcat(N, c(.25,.4,.1,.25))
+
+p1 <- sum(choices == 1)/length(choices)
+p2 <- sum(choices == 2)/length(choices)
+p3 <- sum(choices == 3)/length(choices)
+p4 <- sum(choices == 4)/length(choices)
+
+i1 <- choices == 1
+i2 <- choices == 2
+i3 <- choices == 3
+i4 <- choices == 4
+
+p = dcat(choices, prob=c(p1,p2,p3,p4))
+
+s = 1/p1
+q1 = rep(1, length(p[i1]))
+q2 = p[i2]*s
+q3 = p[i3]*s
+q4 = p[i4]*s
+
+y2 <- log(c(q1, q2))
+y2 <- y2 + rnorm(length(y2)) # add error variance
+x2 <- c(rep(0, length(q1)), rep(1, length(q2)))
+
+m2 <- lm(y2 ~ x2)
+test <- summary(m2)
+c2.out <- c(c2.out, test$coefficients[2,4] < .05)
+
+y3 <- log(c(q1, q3)) 
+y3 <- y3 + rnorm(length(y3)) # add error variance
+x3 <- c(rep(0, length(q1)), rep(1, length(q3)))
+
+m3 <- lm(y3 ~ x3)
+temp3 <- summary(m3)
+c3.out <- c(c3.out, temp3$coefficients[2,4] < .05)
+
+}
+
+summary(c2.out)
+sum(c2.out == T)/length(c2.out) 
+
+summary(c3.out)
+sum(c3.out == T)/length(c3.out) 
+
+```
+
+
 # Academic Scenario Analysis
 
 ## Preparing Data
 
-```{r}
+```{r eval = F}
 
 attobo3$StratAcad <- factor(attobo3$StratAcad, levels = c("Default", "BF", "Method", "Give up"))
 attobo3$StratAcad <- as.numeric(attobo3$StratAcad)
@@ -113,9 +176,10 @@ attobo3.datjags
 
 ```
 
+
 ## Writing Model
 
-```{r}
+```{r eval = F}
 
 attobo3.model <- function() { 
   for (i in 1:N) {
@@ -152,7 +216,7 @@ attobo3.model <- function() {
 
 ## Parameters to monitor
 
-```{r}
+```{r eval = F}
 
 params <- c( "p", "b", "c")
 
@@ -160,7 +224,7 @@ params <- c( "p", "b", "c")
 
 ## Initial Starting Values
 
-```{r}
+```{r eval = F}
 
 inits1 <- list("b" = c(NA, rep(0,3)), 
                "c" = c(NA, rep(0,3))
@@ -203,15 +267,15 @@ attobo3.fit.upd <- autojags(attobo3.fit)
 
 attobo3.mcmc <- as.mcmc(attobo3.fit)
 
-#save(attobo3.mcmc, file = "attobo3.acad.mcmc.RData")
+save(attobo3.mcmc, file = "attobo3.acad.mcmc.RData")
  
-#summary(attobo3.mcmc)
+summary(attobo3.mcmc[,1:9])
 
 ```
 
 ## Checking Model Convergence
 
-```{r eval = FALSE}
+```{r }
 
 MCMCtrace(attobo3.mcmc[,1:9], ind = TRUE, pdf = FALSE  )
 
