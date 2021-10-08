@@ -1,0 +1,202 @@
+---
+title: "power-analysis (study 1)"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(glm2)
+library(dthelper)
+library(car)
+library(stats4)
+library(lsr)
+library(ggplot2)
+```
+
+```{r}
+plotting.sampler(rpois(1000, .2))
+```
+
+
+## validation of generation process
+
+```{r}
+
+# generate data
+nSims <- 1000
+nPx <- 100
+
+bias.effort <- rep(NA, nSims)
+bias.aptitude <- rep(NA, nSims)
+se.effort <- rep(NA, nSims)
+se.aptitude <- rep(NA, nSims)
+
+for (i in 1:nSims){
+  
+  attribution <- sample(c("strategy","effort","aptitude"), size = nPx, replace = T) 
+  effort.dum <- ifelse(attribution == "effort", 1, 0 )
+  aptitude.dum <- ifelse(attribution == "aptitude", 1, 0 )
+  
+  advice <- log(1) + log(.5)*effort.dum + log(.5)*aptitude.dum + rnorm(nPx, sd = log(2))
+  
+  # transform to counts
+  advice.lambda <- exp(advice) 
+  # sample counts using rpois
+  advice.counts <- rpois(nPx, advice.lambda)
+  
+  # aggregate(advice.lambda~attribution, FUN=mean) # difference in .5 counts when noise = 0 
+  # aggregate(advice.counts~attribution, FUN=mean)
+  
+  model <- glm2(advice.counts ~ effort.dum + aptitude.dum, family = poisson(link = "log"))
+  model.sum <- summary(model)
+  
+  coef.effort <- model$coefficients[2]
+  coef.aptitude <- model$coefficients[3]
+  bias.effort[i] <- log(.5) - coef.effort # actual - predicted
+  bias.aptitude[i] <- log(.5) - coef.aptitude # actual - predicted
+  se.effort[i] <- model.sum$coefficients[2,2]
+  se.aptitude[i] <- model.sum$coefficients[3,2]
+}
+
+mean(bias.effort)
+mean(bias.aptitude)
+mean(se.effort)
+mean(se.aptitude)
+```
+
+## function to calculate power
+
+```{r}
+
+est.power <- function(nPx, nSims = 5000){
+  
+nSims <- 1000
+
+p.sig <- rep(NA, nSims)
+
+for (i in 1:nSims){
+  
+  attribution <- sample(c("strategy","effort","aptitude"), size = nPx, replace = T) 
+  effort.dum <- ifelse(attribution == "effort", 1, 0 )
+  aptitude.dum <- ifelse(attribution == "aptitude", 1, 0 )
+  
+  advice <- log(1) + log(.5)*effort.dum + log(.5)*aptitude.dum + rnorm(nPx, sd = log(2))
+  
+  # transform to counts
+  advice.lambda <- exp(advice) 
+  # sample counts using rpois
+  advice.counts <- rpois(nPx, advice.lambda)
+  
+  # aggregate(advice.lambda~attribution, FUN=mean) # difference in .5 counts when noise = 0 
+  # aggregate(advice.counts~attribution, FUN=mean)
+  
+  model <- glm2(advice.counts ~ effort.dum + aptitude.dum, family = poisson(link = "log"))
+  model.sum <- summary(model)
+  p <- model.sum$coefficients["effort.dum","Pr(>|z|)"]
+  p.sig[i] <- ifelse(p < .05,1,0)
+
+}
+
+power <- mean(p.sig)
+return(power)
+}
+
+```
+
+
+```{r}
+est.min.sample <- function(start, desired = .8, nSims = 5000, ratio = 10){
+  require(ggplot2)
+  power <- est.power(start, nSims = nSims)
+  
+  sample.track <- start
+  power.track <- power
+    
+  iteration <- 0
+  while(power < .8) {
+    iteration <- iteration + ratio
+    power <- est.power(start+iteration, nSims = nSims)
+    
+    sample.track <- c(sample.track, start + iteration)
+    power.track <- c(power.track, power)
+    
+  }
+  
+  if(iteration == 0){
+    stop("desired power reached on first iteration. input smaller start value to compute minimum sample required")
+  }
+  
+  while(power > .8){
+    iteration <- iteration - 1
+    power <- est.power(start+iteration, nSims = nSims)
+    
+    sample.track <- c(sample.track, start + iteration)
+    power.track <- c(power.track, power)
+  }
+  
+  required <- start + iteration + 1
+  
+  power.data <- data.frame(sample.track = sample.track,
+                           power.track = power.track)
+  
+  g <- ggplot(power.data,aes(x = sample.track, y = power.track))+
+    geom_point() +
+    geom_hline(yintercept= .8) + 
+    geom_vline(xintercept = required) +
+    xlab("sample size") +
+    ylab("power")
+  print(g)
+  return(required)
+  
+}
+```
+
+
+## calculating minimum sample size needed
+
+```{r}
+set.seed(100)
+est.min.sample(start = 100, nSims = 5000)
+
+```
+
+## calculating standardised effect size
+
+```{r}
+
+nSims <- 1000
+nPx <- 129
+cohen.w <- rep(NA, nSims)
+
+for (i in 1:nSims){
+  
+  attribution <- sample(c("strategy","effort","aptitude"), size = nPx, replace = T) 
+  effort.dum <- ifelse(attribution == "effort", 1, 0 )
+  aptitude.dum <- ifelse(attribution == "aptitude", 1, 0 )
+  
+  advice <- log(1) + log(.5)*effort.dum + log(.5)*aptitude.dum + rnorm(nPx, sd = log(2))
+  
+  # transform to counts
+  advice.lambda <- exp(advice) 
+  # sample counts using rpois
+  advice.counts <- rpois(nPx, advice.lambda)
+  
+  # aggregate(advice.lambda~attribution, FUN=mean) # difference in .5 counts when noise = 0 
+  # aggregate(advice.counts~attribution, FUN=mean)
+  
+  model <- glm2(advice.counts ~ effort.dum + aptitude.dum, family = poisson(link = "log"))
+  model.sum <- summary(model)
+  model.anova <- car::Anova(model)
+  
+  cohen.w[i] <- sqrt(model.anova$`LR Chisq`[1]/(1*nPx))
+
+}
+
+mean(cohen.w)
+```
+
+```
+

@@ -1,0 +1,346 @@
+---
+title: "Study 1 Analysis"
+output:
+  html_document:
+    theme: readable
+    toc: yes
+    toc_depth: 3
+    toc_float: true
+    highlight: tango
+    df_print: paged
+fontsize: 18pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+```{r results='hide'}
+
+library(psych)
+library(ggplot2)
+library(tidyverse)
+library(effects)
+## Library for the multiple comparisons
+library(phia)
+## Library to compute the effect sizes
+library(sjstats)
+library(lsr)
+library(lavaan)
+library(ggthemes)
+library(tibble)
+library(car)
+library(olsrr)
+library(pwr)
+library(dthelper)
+library(glm2)
+library(betareg)
+library(readr)
+select <- dplyr::select
+attobo <- read_csv("attobo1_clean.csv")
+
+colnames(attobo) <- tolower(colnames(attobo))
+
+attobo$scenario <- as.factor(attobo$scenario)
+
+attobo$attribution <- attobo$scenario
+
+attobo$attribution_effort <- factor(attobo$attribution, levels = c("Effort", "Strategy", "Aptitude"))
+attobo$attribution_strat <- factor(attobo$attribution, levels = c( "Strategy","Effort", "Aptitude"))
+
+attobo$expectancy <- (attobo$expectancy - 1)/10
+attobo$expectancy <- ifelse(attobo$expectancy == 1, .999,
+                     ifelse(attobo$expectancy == 0, .001, attobo$expectancy) )
+
+reverse.logodds <- function(x){
+  exp(x)/(1+exp(x))
+}
+
+```
+
+# Descriptive Stats
+
+```{r }
+## Sample Breakdown
+group_by(attobo, attribution) %>%
+  summarise(n())
+  
+## means and sd of DVs
+aggregate(cbind(combined_method, bruteforce, seekhelp)~attribution, data=attobo, FUN=mean)
+
+aggregate(cbind(combined_method, bruteforce, seekhelp)~attribution, data=attobo, FUN=sd)
+
+aggregate(cbind(total, convergent_method)~attribution, data=attobo, FUN=mean)
+
+aggregate(cbind(total, convergent_method)~attribution, data=attobo, FUN=sd)
+
+## Locus, Variability, and Uncontrollability
+attobo %>%
+  group_by(attribution) %>%
+  summarise(meanLocusOut = mean(locusout, na.rm = T),
+            sdLocusOut = sd(locusout, na.rm = T),
+            meanVar = mean(variability, na.rm = T),
+            sdVar = sd(variability, na.rm = T),
+            meanUncon = mean(uncontrollability, na.rm = T),
+            sdUncon = sd(uncontrollability, na.rm = T))
+
+attobo.advice <- attobo %>%
+  select(combined_method, bruteforce, seekhelp, convergent_method,
+         total, expectancy, total_method)
+
+attobo.attribution <- attobo %>%
+  select(aptout, aptvar, aptuncon, 
+         effortout, effortvar, effortuncon,
+         stratout, stratvar, stratuncon,
+         luckout, luckvar, luckuncon,
+         taskout, taskvar, taskuncon,
+         moodout, moodvar, mooduncon)
+
+attobo.others <- attobo %>%
+  select(expectancy, gender, age, education, sms_mean,
+         smo_mean, mp_mean, so_mean)
+  
+
+ggplot(data = gather(attobo.advice, factor_key = TRUE), aes(x = factor(value))) +
+  geom_bar() + 
+  facet_wrap(~ key,scales = "free", as.table = TRUE, nrow = 3) + xlab("") + 
+  theme_bw()
+
+ggplot(data = gather(attobo.attribution, factor_key = TRUE), aes(x = factor(value))) +
+  geom_bar() + 
+  facet_wrap(~ key,scales = "free", as.table = TRUE, nrow = 3) + xlab("") + 
+  theme_bw()
+
+ggplot(data = gather(attobo.others, factor_key = TRUE), aes(x = factor(value))) +
+  geom_bar() + 
+  facet_wrap(~ key,scales = "free", as.table = TRUE, nrow = 3) + xlab("") + 
+  theme_bw()
+
+
+```
+
+# Main Analysis
+
+## Self-directed Study Methods
+
+```{r}
+
+method.freq <- glm2(combined_method ~ attribution_strat, data = attobo, family = poisson(link = "log"))
+
+summary(method.freq)
+confint(method.freq)
+Anova(method.freq)
+
+method.coefs <- summary(method.freq)$coefficients
+
+# strategy
+exp(method.coefs[1, "Estimate"])
+exp(confint(method.freq)[1,])
+
+# effort
+exp(method.coefs[1, "Estimate"] + method.coefs[2, "Estimate"])
+exp(method.coefs[1, "Estimate"] + confint(method.freq)[2,])
+
+# aptitude
+exp(method.coefs[1, "Estimate"] + method.coefs[3, "Estimate"])
+exp(method.coefs[1, "Estimate"] + confint(method.freq)[3,])
+
+
+coef.summary <- data.frame(
+  advice = rep("Self-Directed",3),
+  attribution = c("Strategy", "Effort","Aptitude"),
+  mean = c(exp(method.coefs[1, "Estimate"]), exp(method.coefs[1, "Estimate"] + method.coefs[2, "Estimate"]), exp(method.coefs[1, "Estimate"] + method.coefs[3, "Estimate"])),
+  lower = c(exp(confint(method.freq)[1,])[1], exp(method.coefs[1, "Estimate"] + confint(method.freq)[2,])[1], exp(method.coefs[1, "Estimate"] + confint(method.freq)[3,])[1]),
+  upper = c(exp(confint(method.freq)[1,])[2], exp(method.coefs[1, "Estimate"] + confint(method.freq)[2,])[2], exp(method.coefs[1, "Estimate"] + confint(method.freq)[3,])[2])
+)
+```
+
+## Mandatory Study Methods
+
+```{r}
+
+convergent.freq <- glm2(convergent_method ~ attribution_effort, data = attobo, family = poisson(link = "log"))
+
+summary(convergent.freq)
+confint(convergent.freq)
+Anova(convergent.freq)
+
+convergent.coefs <- summary(convergent.freq)$coefficients
+
+# effort
+exp(convergent.coefs[1, "Estimate"])
+exp(confint(convergent.freq)[1,])
+
+# strategy
+exp(convergent.coefs[1, "Estimate"] + convergent.coefs[2, "Estimate"])
+exp(convergent.coefs[1, "Estimate"] + confint(convergent.freq)[2,])
+
+# aptitude
+exp(convergent.coefs[1, "Estimate"] + convergent.coefs[3, "Estimate"])
+exp(convergent.coefs[1, "Estimate"] + confint(convergent.freq)[3,])
+
+coef.summary <- rbind(coef.summary,data.frame(
+  advice = rep("Mandatory",3),
+  attribution = c( "Effort","Strategy","Aptitude"),
+  mean = c(exp(convergent.coefs[1, "Estimate"]), exp(convergent.coefs[1, "Estimate"] + convergent.coefs[2, "Estimate"]), exp(convergent.coefs[1, "Estimate"] + convergent.coefs[3, "Estimate"])),
+  lower = c(exp(confint(convergent.freq)[1,])[1], exp(convergent.coefs[1, "Estimate"] + confint(convergent.freq)[2,])[1], exp(convergent.coefs[1, "Estimate"] + confint(convergent.freq)[3,])[1]),
+  upper = c(exp(confint(convergent.freq)[1,])[2], exp(convergent.coefs[1, "Estimate"] + confint(convergent.freq)[2,])[2], exp(convergent.coefs[1, "Estimate"] + confint(convergent.freq)[3,])[2])
+)
+)
+```
+
+## Bruteforce Study Methods
+
+```{r}
+
+bruteforce.freq <- glm2(bruteforce ~ attribution_effort, data = attobo, family = poisson(link = "log"))
+
+summary(bruteforce.freq)
+confint(bruteforce.freq)
+Anova(bruteforce.freq)
+
+bruteforce.coefs <- summary(bruteforce.freq)$coefficients
+
+# effort
+exp(bruteforce.coefs[1, "Estimate"])
+exp(confint(bruteforce.freq)[1,])
+
+# strategy
+exp(bruteforce.coefs[1, "Estimate"] + bruteforce.coefs[2, "Estimate"])
+exp(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[2,])
+
+# aptitude
+exp(bruteforce.coefs[1, "Estimate"] + bruteforce.coefs[3, "Estimate"])
+exp(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[3,])
+
+coef.summary <- rbind(coef.summary,data.frame(
+  advice = rep("Work Harder",3),
+  attribution = c( "Effort","Strategy","Aptitude"),
+  mean = c(exp(bruteforce.coefs[1, "Estimate"]), exp(bruteforce.coefs[1, "Estimate"] + bruteforce.coefs[2, "Estimate"]), exp(bruteforce.coefs[1, "Estimate"] + bruteforce.coefs[3, "Estimate"])),
+  lower = c(exp(confint(bruteforce.freq)[1,])[1], exp(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[2,])[1], exp(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[3,])[1]),
+  upper = c(exp(confint(bruteforce.freq)[1,])[2], exp(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[2,])[2], exp(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[3,])[2])
+)
+)
+```
+
+## Expectancy
+
+```{r}
+
+expectancy.freq <- betareg(expectancy ~ attribution, data = attobo, link = "logit" )
+
+summary(expectancy.freq)
+confint(expectancy.freq)
+Anova(expectancy.freq)
+
+expectancy.freq2 <- betareg(expectancy ~ attribution_effort, data = attobo, link = "logit" )
+
+summary(expectancy.freq2)
+confint(expectancy.freq2)
+Anova(expectancy.freq2)
+
+expectancy.coefs <- summary(expectancy.freq)$coefficients$mean
+
+# aptitude
+reverse.logodds(expectancy.coefs[1, "Estimate"])
+reverse.logodds(confint(expectancy.freq)[1,])
+
+# effort
+reverse.logodds(expectancy.coefs[1, "Estimate"] + expectancy.coefs[2, "Estimate"])
+reverse.logodds(expectancy.coefs[1, "Estimate"] + confint(expectancy.freq)[2,])
+
+# strategy
+reverse.logodds(expectancy.coefs[1, "Estimate"] + expectancy.coefs[3, "Estimate"])
+reverse.logodds(expectancy.coefs[1, "Estimate"] + confint(expectancy.freq)[3,])
+
+```
+
+
+## Rely-on-others Study Advice
+
+```{r}
+
+seekhelp.freq <- glm2(seekhelp ~ attribution, data = attobo, family = poisson(link = "log"))
+
+summary(seekhelp.freq)
+confint(seekhelp.freq)
+Anova(seekhelp.freq)
+
+seekhelp.coefs <- summary(seekhelp.freq)$coefficients
+
+# aptitude
+exp(seekhelp.coefs[1, "Estimate"])
+exp(confint(seekhelp.freq)[1,])
+
+# effort
+exp(seekhelp.coefs[1, "Estimate"] + seekhelp.coefs[2, "Estimate"])
+exp(seekhelp.coefs[1, "Estimate"] + confint(seekhelp.freq)[2,])
+
+# strategy
+exp(seekhelp.coefs[1, "Estimate"] + seekhelp.coefs[3, "Estimate"])
+exp(seekhelp.coefs[1, "Estimate"] + confint(seekhelp.freq)[3,])
+
+```
+
+## Total Number of Advice
+
+```{r}
+
+total.freq <- glm2(total ~ attribution, data = attobo, family = poisson(link = "log"))
+
+summary(total.freq)
+confint(total.freq)
+Anova(total.freq)
+
+total.coefs <- summary(total.freq)$coefficients
+
+# aptitude
+exp(total.coefs[1, "Estimate"])
+exp(confint(total.freq)[1,])
+
+# effort
+exp(total.coefs[1, "Estimate"] + total.coefs[2, "Estimate"])
+exp(total.coefs[1, "Estimate"] + confint(total.freq)[2,])
+
+# strategy
+exp(total.coefs[1, "Estimate"] + total.coefs[3, "Estimate"])
+exp(total.coefs[1, "Estimate"] + confint(total.freq)[3,])
+```
+
+# Graphs
+
+```{r}
+
+
+
+coef.summary$Advice <- factor(coef.summary$advice, levels = c("Work Harder", "Mandatory", "Self-Directed"))
+
+coef.summary$Attribution <- factor(coef.summary$attribution, levels = c( "Effort", "Strategy", "Aptitude" ))
+
+
+```
+
+```{r}
+
+
+attobo1.advice.plot <-  ggplot(coef.summary, aes(x = Attribution, y = mean, shape = Advice)) + 
+  geom_errorbar(aes(ymin=lower, ymax=upper), width=.2,
+                 position=position_dodge(.5))+
+  geom_point(aes(col = Advice), position=position_dodge(.5), size = 3) +
+  scale_color_manual(values = c("#D55E00", "#009E73", "#0072B2")) +
+  scale_shape_manual(values = c(16 , 15,17)) +
+  ylab("Number of Advice") + xlab("") + 
+  theme_bw() +
+  theme(text = element_text(size = 18),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) 
+
+attobo1.advice.plot
+#800x600
+```
+
+
+
+
+
+
