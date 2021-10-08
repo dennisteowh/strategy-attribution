@@ -1,6 +1,5 @@
 ---
 title: "Study 2 Analysis"
-author: "Dennis Teo"
 output:
   html_document:
     theme: readable

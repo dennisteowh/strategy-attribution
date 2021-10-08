@@ -1,6 +1,5 @@
 ---
 title: "attobo power analysis (study 2)"
-author: "Dennis"
 output: html_document
 ---
 
