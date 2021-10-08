@@ -1,0 +1,268 @@
+---
+title: "attobo power analysis (study 2)"
+author: "Dennis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(glm2)
+library(dthelper)
+library(car)
+library(stats4)
+library(lsr)
+library(ggplot2)
+
+reverse.logodds <- function(x){
+  exp(x)/(1+exp(x))
+}
+```
+
+```{r}
+ 
+nSims <- 1000
+nPx <- 1000
+
+ attribution <- sample(c("strategy","effort","aptitude"), size = nPx, replace = T) 
+  effort.dum <- ifelse(attribution == "effort", 1, 0 )
+  aptitude.dum <- ifelse(attribution == "aptitude", 1, 0 )
+  valence <- sample(c(0, 1), size = nPx, replace = T) # success represents 0
+  
+  advice <- -1 + 0*effort.dum + 0*aptitude.dum + 3*valence -  2*effort.dum*valence - 2*aptitude.dum*valence
+  advice.prob <- 1/(1+exp(-advice))
+  
+# population probabilities
+aggregate(advice.prob~attribution*valence, FUN=mean)
+```
+
+
+## validation of generation process
+
+```{r}
+
+# generate data
+nSims <- 1000
+nPx <- 300
+
+bias.effort <- rep(NA, nSims)
+bias.aptitude <- rep(NA, nSims)
+bias.valence <- rep(NA, nSims)
+bias.effort.success <- rep(NA, nSims)
+bias.aptitude.success <- rep(NA, nSims)
+se.effort <- rep(NA, nSims)
+se.aptitude <- rep(NA, nSims)
+se.valence <- rep(NA, nSims)
+se.effort.success <- rep(NA, nSims)
+se.aptitude.success <- rep(NA, nSims)
+
+for (i in 1:nSims){
+  
+  attribution <- sample(c("strategy","effort","aptitude"), size = nPx, replace = T) 
+  effort.dum <- ifelse(attribution == "effort", 1, 0 )
+  aptitude.dum <- ifelse(attribution == "aptitude", 1, 0 )
+  valence <- sample(c(0, 1), size = nPx, replace = T) # success represents 0
+  
+  advice <- -1 + 0*effort.dum + 0*aptitude.dum + 3*valence -  2*effort.dum*valence - 2*aptitude.dum*valence  + rnorm(nPx, sd = .1)
+  
+  # transform to counts
+  advice.prob <- 1/(1+exp(-advice))
+  # sample choices using rbinom
+  advice.binary <- rbinom(nPx, size = 1, prob = advice.prob)
+  
+  aggregate(advice.prob~attribution*valence, FUN=mean) # approximately .1 increase in probability for interaction and .2 increase in probability for valence
+  aggregate(advice.binary~attribution*valence, FUN=mean)
+  
+  model <- glm2(advice.binary ~ effort.dum*valence + aptitude.dum*valence, family = binomial(link = "logit"))
+  model.sum <- summary(model)
+  
+  coef.effort <- model$coefficients[2]
+  coef.aptitude <- model$coefficients[4]
+  coef.valence <- model$coefficients[3]
+  coef.effort.success <- model$coefficients[5]
+  coef.aptitude.success <-  model$coefficients[6]
+  
+  bias.effort[i] <- 0 - coef.effort
+  bias.aptitude[i] <-  0 - coef.aptitude
+  bias.valence[i] <- 3 - coef.valence
+  bias.effort.success[i] <- -2 - coef.effort.success
+  bias.aptitude.success[i] <- -2 - coef.aptitude.success
+  se.effort[i] <- model.sum$coefficients[2, "Std. Error"]
+  se.aptitude[i] <-model.sum$coefficients[4, "Std. Error"]
+  se.valence[i] <- model.sum$coefficients[3, "Std. Error"]
+  se.effort.success[i] <- model.sum$coefficients[5, "Std. Error"]
+  se.aptitude.success[i] <-model.sum$coefficients[6, "Std. Error"]
+}
+
+mean(bias.effort)
+mean(bias.aptitude)
+mean(bias.valence)
+mean(bias.effort.success)
+mean(bias.aptitude.success)
+
+mean(se.effort)
+mean(se.aptitude)
+mean(se.valence)
+mean(se.effort.success)
+mean(se.aptitude.success)
+```
+
+## function to calculate power
+
+```{r}
+
+est.power <- function(nPx, nSims = 5000, target = "interaction"){
+  
+nSims <- 1000
+
+p.sig <- rep(NA, nSims)
+
+for (i in 1:nSims){
+  
+  attribution <- sample(c("strategy","effort","aptitude"), size = nPx, replace = T) 
+  effort.dum <- ifelse(attribution == "effort", 1, 0 )
+  aptitude.dum <- ifelse(attribution == "aptitude", 1, 0 )
+  valence <- sample(c(0, 1), size = nPx, replace = T) # success represents 0
+  
+  advice <- -1 + 0*effort.dum + 0*aptitude.dum + 3*valence -  2*effort.dum*valence - 2*aptitude.dum*valence  + rnorm(nPx, sd = .1)
+  
+  # transform to counts
+  advice.prob <- 1/(1+exp(-advice))
+  # sample choices using rbinom
+  advice.binary <- rbinom(nPx, size = 1, prob = advice.prob)
+  
+  # aggregate(advice.prob~attribution*valence, FUN=mean) # approximately .2 increase in probability for interaction and .2 increase in probability for valence
+  # aggregate(advice.binary~attribution*valence, FUN=mean)
+  valence <- ifelse(valence == 0, "success", "failure")
+  valence <- factor(valence, levels = c("failure","success"))
+  
+  model <- glm2(advice.binary ~ effort.dum*valence + aptitude.dum*valence, family = binomial(link = "logit"))
+  model.sum <- summary(model)
+  
+  if(target == "interaction"){
+  p <- model.sum$coefficients["effort.dum:valencesuccess","Pr(>|z|)"] # p for interaction effect
+  p.sig[i] <- ifelse(p < .05,1,0)
+  } else if (target == "simple"){
+  p <- model.sum$coefficients["effort.dum","Pr(>|z|)"] 
+  p.sig[i] <- ifelse(p < .05,1,0)
+  }
+
+
+}
+
+power <- mean(p.sig)
+return(power)
+}
+
+```
+
+
+```{r}
+est.min.sample <- function(start, desired = .8, nSims = 5000, ratio = 10, target = "interaction"){
+  require(ggplot2)
+  power <- est.power(start, nSims = nSims, target = target)
+  
+  sample.track <- start
+  power.track <- power
+    
+  iteration <- 0
+  while(power < desired) {
+    iteration <- iteration + ratio
+    power <- est.power(start+iteration, nSims = nSims)
+    
+    sample.track <- c(sample.track, start + iteration)
+    power.track <- c(power.track, power)
+    
+  }
+  
+  if(iteration == 0){
+    stop("desired power reached on first iteration. input smaller start value to compute minimum sample required")
+  }
+  
+  while(power > desired){
+    iteration <- iteration - 1
+    power <- est.power(start+iteration, nSims = nSims)
+    
+    sample.track <- c(sample.track, start + iteration)
+    power.track <- c(power.track, power)
+  }
+  
+  required <- start + iteration + 1
+  
+  power.data <- data.frame(sample.track = sample.track,
+                           power.track = power.track)
+  
+  g <- ggplot(power.data,aes(x = sample.track, y = power.track))+
+    geom_point() +
+    geom_hline(yintercept= .8) + 
+    geom_vline(xintercept = required) +
+    xlab("sample size") +
+    ylab("power")
+  print(g)
+  return(required)
+  
+}
+```
+
+
+## calculating minimum sample size needed
+
+```{r}
+set.seed(100)
+est.min.sample(start = 150, nSims = 5000, target = "simple")
+
+set.seed(100)
+est.min.sample(start = 150, nSims = 5000, target = "interaction")
+
+
+```
+
+```{r}
+
+# install.packages("remotes")
+# remotes::install_github("markushuff/PsychHelperFunctions")
+
+set.seed(100)
+
+nPx <- 279
+nSims <- 1000
+
+cohen.w <- rep(NA, nSims)
+cohen.w2 <- rep(NA, nSims)
+
+for (i in 1:nSims){
+  
+  attribution <- sample(c("strategy","effort","aptitude"), size = nPx, replace = T) 
+  effort.dum <- ifelse(attribution == "effort", 1, 0 )
+  aptitude.dum <- ifelse(attribution == "aptitude", 1, 0 )
+  valence <- sample(c(0, 1), size = nPx, replace = T) # success represents 0
+  
+  advice <- -1 + 0*effort.dum + 0*aptitude.dum + 3*valence -  2*effort.dum*valence - 2*aptitude.dum*valence  + rnorm(nPx, sd = .1)
+  
+  # transform to counts
+  advice.prob <- 1/(1+exp(-advice))
+  # sample choices using rbinom
+  advice.binary <- rbinom(nPx, size = 1, prob = advice.prob)
+  
+  # aggregate(advice.prob~attribution*valence, FUN=mean) # approximately .2 increase in probability for interaction and .2 increase in probability for valence
+  # aggregate(advice.binary~attribution*valence, FUN=mean)
+  valence <- ifelse(valence == 0, "success", "failure")
+  valence <- factor(valence, levels = c("failure","success"))
+  
+  model <- glm2(advice.binary ~ attribution*valence, family = binomial(link = "logit"))
+  model.sum <- summary(model)
+  model.anova <- car::Anova(model)
+  cohen.w[i] <- sqrt(model.anova$`LR Chisq`[3]/(2*nPx))
+  cohen.w2[i] <- PsychHelperFunctions::cohens_w(model.anova$`LR Chisq`[3], nPx) #sqrt(model.anova$`LR Chisq`[3]/(nPx))
+  
+  }
+
+
+# cohen w
+mean(cohen.w)
+mean(cohen.w2)
+
+```
+
