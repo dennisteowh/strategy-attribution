@@ -1,0 +1,301 @@
+---
+title: "power-analysis (study 3)"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dthelper)
+library(foreign)
+library(nnet)
+library(extraDistr)
+```
+
+
+
+## Tendency of Generative Process 
+
+```{r}
+set.seed(100)
+
+N <- 10000
+
+# effort = 0 ,strat = 1
+attribution <- c(rep(0, N), rep(1, N))
+
+# method
+q1 <- 1 + .5*attribution + rnorm(length(attribution), sd=.2)
+# BF
+q2 <- 1 - .25*attribution + rnorm(length(attribution), sd=.2)
+# default
+q3 <- 1 - .25*attribution + rnorm(length(attribution), sd=.2)
+# give up
+q4 <- 1 + 0*attribution + rnorm(length(attribution), sd=.2)
+
+q.sum <- rowSums(data.frame(q1,q2,q3,q4))
+
+p1 <- q1/q.sum
+p2 <- q2/q.sum
+p3 <- q3/q.sum
+p4 <- q4/q.sum
+
+mean(p1)
+mean(p2)
+mean(p3)
+mean(p4)
+
+choices <- c()
+for(i in 1:(2*N)){
+  choices[i] <- rcat(1, c(p1[i],p2[i],p3[i],p4[i]))
+  
+}
+
+table(choices)/20000
+table(choices, attribution)/10000
+# lowest effect size about 8%
+
+```
+
+```{r results='hide', message=F,warning=F}
+
+set.seed(100)
+
+N <- 300
+nSims <- 2
+
+results1 <- c()
+results2 <- c()
+results3 <- c()
+
+for (i in 1:nSims){
+  
+  # effort = 0 ,strat = 1
+attribution <- c(rep(0, N), rep(1, N))
+
+# method
+q1 <- 1 + .5*attribution + rnorm(length(attribution), sd=.2)
+# BF
+q2 <- 1 - .25*attribution + rnorm(length(attribution), sd=.2)
+# default
+q3 <- 1 - .25*attribution + rnorm(length(attribution), sd=.2)
+# give up
+q4 <- 1 + 0*attribution + rnorm(length(attribution), sd=.2)
+
+q.sum <- rowSums(data.frame(q1,q2,q3,q4))
+
+p1 <- q1/q.sum
+p2 <- q2/q.sum
+p3 <- q3/q.sum
+p4 <- q4/q.sum
+
+choices <- c()
+for(j in 1:(2*N)){
+  choices[j] <- rcat(1, c(p1[j],p2[j],p3[j],p4[j]))
+  
+}
+
+test <- multinom(choices ~ attribution)
+summary(test)
+
+z <- summary(test)$coefficients/summary(test)$standard.errors
+z
+
+# 2-tailed z test
+p <- (1 - pnorm(abs(z), 0, 1)) * 2
+p
+
+results1[i] <- ifelse(p[1,2] < .05,1,0)
+results2[i] <- ifelse(p[2,2] < .05,1,0)
+results3[i] <- ifelse(p[3,2] < .05,1,0)
+
+}
+
+
+
+```
+
+```{r}
+# power
+mean(results1)
+mean(results2)
+mean(results3)
+```
+
+
+```{r }
+
+est.power <- function(nPx, nSims = 5000){
+
+N <- nPx
+nSims <- nSims
+
+p.sig <- rep(NA, nSims)
+
+for (i in 1:nSims){
+  
+  # effort = 0 ,strat = 1
+attribution <- c(rep(0, N), rep(1, N))
+
+# method
+q1 <- 1 + .5*attribution + rnorm(length(attribution), sd=.2)
+# BF
+q2 <- 1 - .25*attribution + rnorm(length(attribution), sd=.2)
+# default
+q3 <- 1 - .25*attribution + rnorm(length(attribution), sd=.2)
+# give up
+q4 <- 1 + 0*attribution + rnorm(length(attribution), sd=.2)
+
+q.sum <- rowSums(data.frame(q1,q2,q3,q4))
+
+p1 <- q1/q.sum
+p2 <- q2/q.sum
+p3 <- q3/q.sum
+p4 <- q4/q.sum
+
+choices <- c()
+for(j in 1:(2*N)){
+  choices[j] <- rcat(1, c(p1[j],p2[j],p3[j],p4[j]))
+  
+}
+
+test <- multinom(choices ~ attribution)
+summary(test)
+
+z <- summary(test)$coefficients/summary(test)$standard.errors
+z
+
+# 2-tailed z test
+p <- (1 - pnorm(abs(z), 0, 1)) * 2
+p
+
+p.sig[i] <- ifelse(p[1,2] < .05,1,0)
+
+}
+
+power <- mean(p.sig)
+return(power)
+}
+
+```
+
+
+```{r}
+est.min.sample <- function(start, desired = .8, nSims = 5000, ratio = 10){
+  require(ggplot2)
+  power <- est.power(start, nSims = nSims)
+  
+  sample.track <- start
+  power.track <- power
+    
+  iteration <- 0
+  while(power < .8) {
+    iteration <- iteration + ratio
+    power <- est.power(start+iteration, nSims = nSims)
+    
+    sample.track <- c(sample.track, start + iteration)
+    power.track <- c(power.track, power)
+    
+  }
+  
+  if(iteration == 0){
+    stop("desired power reached on first iteration. input smaller start value to compute minimum sample required")
+  }
+  
+  while(power > .8){
+    iteration <- iteration - 1
+    power <- est.power(start+iteration, nSims = nSims)
+    
+    sample.track <- c(sample.track, start + iteration)
+    power.track <- c(power.track, power)
+  }
+  
+  required <- start + iteration + 1
+  
+  power.data <- data.frame(sample.track = sample.track,
+                           power.track = power.track)
+  
+  g <- ggplot(power.data,aes(x = sample.track, y = power.track))+
+    geom_point() +
+    geom_hline(yintercept= .8) + 
+    geom_vline(xintercept = required) +
+    xlab("sample size") +
+    ylab("power")
+  print(g)
+  return(required)
+  
+}
+```
+
+```{r results='hide', message=F,warning=F}
+set.seed(100)
+min.sample <- est.min.sample(start = 200, nSims = 500)
+
+```
+
+```{r}
+min.sample
+```
+
+
+# standardised effect size
+
+```{r results='hide', message=F,warning=F}
+
+set.seed(100)
+
+N <- 230
+nSims <- 1000
+
+cohen.w <- c()
+
+for (i in 1:nSims){
+  
+  # effort = 0 ,strat = 1
+attribution <- c(rep(0, N), rep(1, N))
+
+# method
+q1 <- 1 + .5*attribution + rnorm(length(attribution), sd=.2)
+# BF
+q2 <- 1 - .25*attribution + rnorm(length(attribution), sd=.2)
+# default
+q3 <- 1 - .25*attribution + rnorm(length(attribution), sd=.2)
+# give up
+q4 <- 1 + 0*attribution + rnorm(length(attribution), sd=.2)
+
+q.sum <- rowSums(data.frame(q1,q2,q3,q4))
+
+p1 <- q1/q.sum
+p2 <- q2/q.sum
+p3 <- q3/q.sum
+p4 <- q4/q.sum
+
+choices <- c()
+for(j in 1:(2*N)){
+  choices[j] <- rcat(1, c(p1[j],p2[j],p3[j],p4[j]))
+  
+}
+
+test <- multinom(choices ~ attribution)
+summary(test)
+test.anova <- car::Anova(test)
+cohen.w[i] <- sqrt(test.anova$`LR Chisq`[1]/(3*N))
+
+}
+
+
+
+```
+
+```{r}
+# power
+mean(cohen.w)
+```
+
+
+
+
+
+
