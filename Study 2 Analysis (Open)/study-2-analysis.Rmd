@@ -1,25 +1,28 @@
 ---
-title: "Study 2 Analysis"
-output:
+title: "Study 2 Analysis (Academic Domain)"
+author: "Dennis W.H. Teo"
+output: 
   html_document:
-    theme: readable
+    theme: darkly
     toc: yes
     toc_depth: 3
     toc_float: true
     highlight: tango
     df_print: paged
+    fig_caption: false
+    code_fold: hide
 fontsize: 18pt
-    
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message=FALSE)
+knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE)
 ```
 
-```{r results='hide', eval=TRUE}
+```{r results='hide', warning=F, message=F}
 
 library(psych)
 library(ggplot2)
+library(tidyverse)
 library(effects)
 ## Library for the multiple comparisons
 library(phia)
@@ -32,154 +35,52 @@ library(tibble)
 library(car)
 library(olsrr)
 library(pwr)
-library(car)
-library(tidyverse)
+library(dthelper)
 library(glm2)
 library(betareg)
-library(multcomp)
-library(dthelper)
-
-select <- dplyr::select
-
-```
-
-```{r eval=TRUE}
-
 library(readr)
-attobo2 <- read_csv("attobo2_clean.csv")
-
-```
-
-```{r  results='hide', eval=TRUE}
-
-# failure$scenario <- as.factor(failure$scenario)
-attobo2$scenario <- as.factor(attobo2$scenario)
-# success$scenario <- as.factor(success$scenario)
-attobo2$valence <- as.factor(attobo2$valence)
-attobo2$attribution <- as.factor(attobo2$attribution)
-
-attobo2$expectancy <- (attobo2$expectancy - 1)/10
-attobo2$expectancy <- ifelse(attobo2$expectancy == 1, .999,
-                     ifelse(attobo2$expectancy == 0, .001, attobo2$expectancy) )
-
-attobo2$attribution_effort <- factor(attobo2$attribution, levels = c("Effort", "Strategy", "Aptitude"))
-attobo2$attribution_strat <- factor(attobo2$attribution, levels = c( "Strategy","Effort", "Aptitude"))
-
-attobo2$redo.feedback <- ifelse(attobo2$redo == 1 & attobo2$method == 1, 1,0)
-
-attobo2$redo.nofeedback <- ifelse(attobo2$redo == 1 & attobo2$method == 0, 1,0)
-
-attobo2.fail <- attobo2 %>% filter(valence == "Fail")
+select <- dplyr::select
 
 reverse.logodds <- function(x){
   exp(x)/(1+exp(x))
 }
+
+report <- function(x,dp=2){
+  m <- round(mean(x, na.rm=T),dp)
+  s <- round(sd(x, na.rm=T),dp)
+  return(paste0(m, " (", s, ")"))
+}
 ```
 
-
-
-# IRR
 ```{r}
+# loading and wrangling data
 
-sum(attobo2$method_den == attobo2$method_val)/length(attobo2$method_val)
+attobo <- read_csv("attobo2_clean.csv")
 
-sum(attobo2$bruteforce_den == attobo2$method_val)/length(attobo2$bruteforce_val)
+colnames(attobo) <- tolower(colnames(attobo))
 
-sum(attobo2$redo_den == attobo2$method_val)/length(attobo2$redo_val)
+attobo$scenario <- as.factor(attobo$scenario)
 
+attobo$attribution <- attobo$scenario
 
-```
+attobo$attribution_effort <- factor(attobo$attribution, levels = c("Effort", "Strategy", "Aptitude"))
+attobo$attribution_strat <- factor(attobo$attribution, levels = c( "Strategy","Effort", "Aptitude"))
 
+attobo$expectancy <- (attobo$expectancy - 1)/10
+attobo$expectancy <- ifelse(attobo$expectancy == 1, .999,
+                     ifelse(attobo$expectancy == 0, .001, attobo$expectancy) )
 
+attobo <- attobo %>%
+  rename(selfdirected = combined_method,
+         workharder = bruteforce,
+         mandatory = convergent_method 
+         )
 
-# Descriptive Stats
+attobo.advice <- attobo %>%
+  select(selfdirected, workharder, seekhelp, mandatory,
+         total, expectancy)
 
-```{r eval=TRUE}
-## Sample Breakdown
-group_by(attobo2, attribution) %>%
-  summarise(n())
-  
-##Descriptive stats for the DVs
-
-##method
-group_by(attobo2, attribution, valence) %>%
-  filter(method == 1) %>%
-  summarise(n())
-
-##bruteforce
-group_by(attobo2, attribution, valence) %>%
-  filter(bruteforce == 1) %>%
-  summarise(n())
-
-##redo
-group_by(attobo2, attribution, valence) %>%
-  filter(redo == 1) %>%
-  summarise(n())
-
-##threat
-group_by(attobo2, attribution, valence) %>%
-  filter(threat == 1) %>%
-  summarise(n())
-
-##tangible rewards
-group_by(attobo2, attribution, valence) %>%
-  filter(tangiblerewards == 1) %>%
-  summarise(n())
-
-
-##Zooming into redo
-redo <- attobo2 %>%
-  filter(redo == 1)
-
-group_by(attobo2, redo, scenario) %>%
-  summarise(n())
-
-##redo with methodological Feedback
-group_by(attobo2, redo, scenario) %>%
-  filter(method == 1) %>%
-  summarise(n())
-
-group_by(attobo2, scenario)%>%
-  summarize(method = sum(method == 1&redo==1)/sum(redo==1) )
-
-##expectancy
-attobo2 %>%
-  group_by(scenario) %>%
-  summarise(meanexpectancy = mean(expectancy, na.rm=T),
-            sdexpectancy = sd(expectancy, na.rm = T))
-
-noswitch <- attobo2 %>%
-  filter(switch == 0)
-
-noswitch %>%
-  group_by(scenario) %>%
-  count()
-
-noswitch %>%
-  group_by(scenario) %>%
-  summarise(meanexpectancy = mean(expectancy, na.rm=T),
-            sdexpectancy = sd(expectancy, na.rm = T))
-
-####Demographics####
-
-attobo2 %>%
-  group_by(gender) %>%
-  count()
-164/292 #males
-
-
-mean(attobo2$age)
-sd(attobo2$age)
-
-```
-
-```{r eval=TRUE}
-
-attobo2.advice <- attobo2 %>%
-  select(method, bruteforce, threat, tangiblerewards,
-         switch, expectancy)
-
-attobo2.attribution <- attobo2 %>%
+attobo.attribution <- attobo %>%
   select(aptout, aptvar, aptuncon, 
          effortout, effortvar, effortuncon,
          stratout, stratvar, stratuncon,
@@ -187,294 +88,283 @@ attobo2.attribution <- attobo2 %>%
          taskout, taskvar, taskuncon,
          moodout, moodvar, mooduncon)
 
-attobo2.others <- attobo2 %>%
-  select(gender, age, education, sms,
-         smo, so, race)
+attobo.others <- attobo %>%
+  select(expectancy, gender, age, education, sms_mean,
+         smo_mean, mp_mean, so_mean)
 
-ggplot(data = gather(attobo2.advice, factor_key = TRUE), aes(x = factor(value))) +
+
+```
+
+# Descriptive Stats
+
+## Sample Breakdown
+
+```{r}
+## Sample Breakdown
+attobo %>%
+  mutate(`Attibution Condition` = attribution) %>%
+  group_by(`Attibution Condition`) %>%
+  summarise(N = n())
+```
+
+## Descriptives of Advice Counts by Experimental Condition
+
+Note: Originally, the coders counted each advice type. Subsequently, these counts were converted to presence/absence to make the results more comparable to the previous study. The descriptive stats below show the mean and sd (in brackets) of the counts of each advice type by attribution condition.
+
+```{r}
+attobo %>%
+  mutate(`Attibution Condition` = attribution) %>%
+  group_by(`Attibution Condition`) %>%
+  summarise(
+    `Self-directed` = report(selfdirected),
+    `Work Harder` = report(workharder),
+    `Mandatory` = report(mandatory)
+  )
+```
+## Histograms of Collected Measures
+
+```{r }
+
+ggplot(data = gather(attobo.advice, factor_key = TRUE), aes(x = factor(value))) +
   geom_bar() + 
   facet_wrap(~ key,scales = "free", as.table = TRUE, nrow = 3) + xlab("") + 
   theme_bw()
 
-ggplot(data = gather(attobo2.attribution, factor_key = TRUE), aes(x = factor(value))) +
+ggplot(data = gather(attobo.attribution, factor_key = TRUE), aes(x = factor(value))) +
   geom_bar() + 
   facet_wrap(~ key,scales = "free", as.table = TRUE, nrow = 3) + xlab("") + 
   theme_bw()
 
-ggplot(data = gather(attobo2.others, factor_key = TRUE), aes(x = factor(value))) +
+ggplot(data = gather(attobo.others, factor_key = TRUE), aes(x = factor(value))) +
   geom_bar() + 
   facet_wrap(~ key,scales = "free", as.table = TRUE, nrow = 3) + xlab("") + 
   theme_bw()
 
 ```
-
 
 # Main Analysis
+## Work Harder Study Methods {.tabset}
 
-## Methodological Advice
+### Model and Hypothesis test
+
 ```{r}
-method.freq <- glm2(method ~ attribution_strat*valence, data = attobo2, family = binomial(link = "logit"))
+attobo$workharder_bool <- ifelse(attobo$workharder > 0, 1, 0)
 
-summary(method.freq)
-confint(method.freq)
-Anova(method.freq)
+workharder.model<- glm2(workharder_bool ~ attribution_effort, data = attobo, family = binomial(link = "logit"))
 
-method.coefs <- summary(method.freq)$coefficients
+summary(workharder.model)
+confint(workharder.model)
+Anova(workharder.model)
 
-## Failure
+# compute effect size
+model.anova <- car::Anova(workharder.model)
+cohen.w <- sqrt(model.anova$`LR Chisq`[1]/(1*nrow(attobo)))
+print(paste("Cohen W:", round(cohen.w,3) ))
 
-# strategy
-reverse.logodds(method.coefs[1, "Estimate"])
-reverse.logodds(confint(method.freq)[1,])
+```
 
-# effort
-reverse.logodds(method.coefs[1, "Estimate"] + method.coefs[2, "Estimate"])
-reverse.logodds(method.coefs[1, "Estimate"] + confint(method.freq)[2,])
+### Converted Estimates (to probability)
 
-# aptitude
-reverse.logodds(method.coefs[1, "Estimate"] + method.coefs[3, "Estimate"])
-reverse.logodds(method.coefs[1, "Estimate"] + confint(method.freq)[3,])
+```{r}
 
+workharder.coefs <- summary(workharder.model)$coefficients
 
-## Success
-
-# strategy
-reverse.logodds(method.coefs[1, "Estimate"]+method.coefs[4, "Estimate"])
-reverse.logodds(confint(method.freq)[1,]+method.coefs[4, "Estimate"])
-
-# effort
-reverse.logodds(method.coefs[1, "Estimate"] + method.coefs[2, "Estimate"]+method.coefs[4, "Estimate"])
-reverse.logodds(method.coefs[1, "Estimate"]+method.coefs[4, "Estimate"] + confint(method.freq)[2,])
-
-# aptitude
-reverse.logodds(method.coefs[1, "Estimate"] + method.coefs[3, "Estimate"]+method.coefs[4, "Estimate"])
-reverse.logodds(method.coefs[1, "Estimate"]+method.coefs[4, "Estimate"] + confint(method.freq)[3,])
-
-coef.summary <- data.frame(
-  advice = rep("Methodological",3),
-  attribution = c("Strategy", "Effort","Aptitude"),
-  mean = c(reverse.logodds(method.coefs[1, "Estimate"]), reverse.logodds(method.coefs[1, "Estimate"] + method.coefs[2, "Estimate"]), reverse.logodds(method.coefs[1, "Estimate"] + method.coefs[3, "Estimate"])),
-  lower = c(reverse.logodds(confint(method.freq)[1,])[1], reverse.logodds(method.coefs[1, "Estimate"] + confint(method.freq)[2,])[1], reverse.logodds(method.coefs[1, "Estimate"] + confint(method.freq)[3,])[1]),
-  upper = c(reverse.logodds(confint(method.freq)[1,])[2], reverse.logodds(method.coefs[1, "Estimate"] + confint(method.freq)[2,])[2], reverse.logodds(method.coefs[1, "Estimate"] + confint(method.freq)[3,])[2])
+workharder.summary <- data.frame(
+  advice = rep("Work Harder",3),
+  attribution = c("Effort", "Strategy","Aptitude"),
+  mean = c(reverse.logodds(workharder.coefs[1, "Estimate"]), reverse.logodds(workharder.coefs[1, "Estimate"] + workharder.coefs[2, "Estimate"]), reverse.logodds(workharder.coefs[1, "Estimate"] + workharder.coefs[3, "Estimate"])),
+  lower = c(reverse.logodds(confint(workharder.model)[1,])[1], reverse.logodds(workharder.coefs[1, "Estimate"] + confint(workharder.model)[2,])[1], reverse.logodds(workharder.coefs[1, "Estimate"] + confint(workharder.model)[3,])[1]),
+  upper = c(reverse.logodds(confint(workharder.model)[1,])[2], reverse.logodds(workharder.coefs[1, "Estimate"] + confint(workharder.model)[2,])[2], reverse.logodds(workharder.coefs[1, "Estimate"] + confint(workharder.model)[3,])[2])
 )
 
+coef.summary <- workharder.summary
+
+colnames(workharder.summary) <- c("Advice", "Attribution", "Mean", "Lower", "Upper")
+workharder.summary
 ```
 
+## Mandatory Study Methods {.tabset}
 
-## Work Harder Advice
+### Model and Hypothesis test
 
 ```{r}
 
-bruteforce.freq <- glm2(bruteforce ~ attribution_effort*valence, data = attobo2, family = binomial(link = "logit"))
+attobo$mandatory_bool <- ifelse(attobo$mandatory > 0, 1, 0)
 
+mandatory.model <- glm2(mandatory_bool ~ attribution_effort, data = attobo, family = binomial(link = "logit"))
 
-summary(bruteforce.freq)
-confint(bruteforce.freq)
-Anova(bruteforce.freq)
+summary(mandatory.model)
+confint(mandatory.model)
+Anova(mandatory.model)
 
-bruteforce.coefs <- summary(bruteforce.freq)$coefficients
-
-## Failure
-
-# effort
-reverse.logodds(bruteforce.coefs[1, "Estimate"])
-reverse.logodds(confint(bruteforce.freq)[1,])
-
-# strategy
-reverse.logodds(bruteforce.coefs[1, "Estimate"] + bruteforce.coefs[2, "Estimate"])
-reverse.logodds(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[2,])
-
-# aptitude
-reverse.logodds(bruteforce.coefs[1, "Estimate"] + bruteforce.coefs[3, "Estimate"])
-reverse.logodds(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[3,])
-
-
-## Success
-
-# effort
-reverse.logodds(bruteforce.coefs[1, "Estimate"]+bruteforce.coefs[4, "Estimate"])
-reverse.logodds(confint(bruteforce.freq)[1,]+bruteforce.coefs[4, "Estimate"])
-
-# strategy
-reverse.logodds(bruteforce.coefs[1, "Estimate"] + bruteforce.coefs[2, "Estimate"]+bruteforce.coefs[4, "Estimate"])
-reverse.logodds(bruteforce.coefs[1, "Estimate"]+bruteforce.coefs[4, "Estimate"] + confint(bruteforce.freq)[2,])
-
-# aptitude
-reverse.logodds(bruteforce.coefs[1, "Estimate"] + bruteforce.coefs[3, "Estimate"]+bruteforce.coefs[4, "Estimate"])
-reverse.logodds(bruteforce.coefs[1, "Estimate"]+bruteforce.coefs[4, "Estimate"] + confint(bruteforce.freq)[3,])
-
-coef.summary <- rbind(coef.summary, data.frame(
-  advice = rep("Work Harder",3),
-  attribution = c("Effort","Strategy","Aptitude"),
-  mean = c(reverse.logodds(bruteforce.coefs[1, "Estimate"]), reverse.logodds(bruteforce.coefs[1, "Estimate"] + bruteforce.coefs[2, "Estimate"]), reverse.logodds(bruteforce.coefs[1, "Estimate"] + bruteforce.coefs[3, "Estimate"])),
-  lower = c(reverse.logodds(confint(bruteforce.freq)[1,])[1], reverse.logodds(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[2,])[1], reverse.logodds(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[3,])[1]),
-  upper = c(reverse.logodds(confint(bruteforce.freq)[1,])[2], reverse.logodds(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[2,])[2], reverse.logodds(bruteforce.coefs[1, "Estimate"] + confint(bruteforce.freq)[3,])[2])
-))
+# compute effect size
+model.anova <- car::Anova(mandatory.model)
+cohen.w <- sqrt(model.anova$`LR Chisq`[1]/(1*nrow(attobo)))
+print(paste("Cohen W:", round(cohen.w,3) ))
 
 ```
-
-
-## Try Again Advice
-
-```{r}
-redo.freq <- glm2(redo ~ attribution_effort*valence, data = attobo2, family = binomial(link = "logit"))
-
-redo.freq.alt <- glm2(redo ~ attribution*valence, data = attobo2, family = binomial(link = "logit"))
-
-summary(redo.freq)
-confint(redo.freq)
-Anova(redo.freq)
-
-summary(redo.freq.alt)
-
-redo.coefs <- summary(redo.freq)$coefficients
-
-## Failure
-
-# effort
-reverse.logodds(redo.coefs[1, "Estimate"])
-reverse.logodds(confint(redo.freq)[1,])
-
-# strategy
-reverse.logodds(redo.coefs[1, "Estimate"] + redo.coefs[2, "Estimate"])
-reverse.logodds(redo.coefs[1, "Estimate"] + confint(redo.freq)[2,])
-
-# aptitude
-reverse.logodds(redo.coefs[1, "Estimate"] + redo.coefs[3, "Estimate"])
-reverse.logodds(redo.coefs[1, "Estimate"] + confint(redo.freq)[3,])
-
-
-## Success
-
-# effort
-reverse.logodds(redo.coefs[1, "Estimate"]+redo.coefs[4, "Estimate"])
-reverse.logodds(confint(redo.freq)[1,]+redo.coefs[4, "Estimate"])
-
-# strategy
-reverse.logodds(redo.coefs[1, "Estimate"] + redo.coefs[2, "Estimate"]+redo.coefs[4, "Estimate"])
-reverse.logodds(redo.coefs[1, "Estimate"]+redo.coefs[4, "Estimate"] + confint(redo.freq)[2,])
-
-# aptitude
-reverse.logodds(redo.coefs[1, "Estimate"] + redo.coefs[3, "Estimate"]+redo.coefs[4, "Estimate"])
-reverse.logodds(redo.coefs[1, "Estimate"]+redo.coefs[4, "Estimate"] + confint(redo.freq)[3,])
-
-coef.summary <- rbind(coef.summary, data.frame(
-  advice = rep("Try Again",3),
-  attribution = c("Effort","Strategy","Aptitude"),
-  mean = c(reverse.logodds(redo.coefs[1, "Estimate"]), reverse.logodds(redo.coefs[1, "Estimate"] + redo.coefs[2, "Estimate"]), reverse.logodds(redo.coefs[1, "Estimate"] + redo.coefs[3, "Estimate"])),
-  lower = c(reverse.logodds(confint(redo.freq)[1,])[1], reverse.logodds(redo.coefs[1, "Estimate"] + confint(redo.freq)[2,])[1], reverse.logodds(redo.coefs[1, "Estimate"] + confint(redo.freq)[3,])[1]),
-  upper = c(reverse.logodds(confint(redo.freq)[1,])[2], reverse.logodds(redo.coefs[1, "Estimate"] + confint(redo.freq)[2,])[2], reverse.logodds(redo.coefs[1, "Estimate"] + confint(redo.freq)[3,])[2])
-))
-```
-
-## Expectancy
-
-```{r}
-expectancy.freq <- betareg(expectancy ~ attribution*valence, data = attobo2, link = "logit" )
-
-expectancy.coefs <- summary(expectancy.freq)$coefficients$mean
-
-## Failure
-
-# aptitude
-reverse.logodds(expectancy.coefs[1, "Estimate"])
-reverse.logodds(confint(expectancy.freq)[1,])
-
-# effort
-reverse.logodds(expectancy.coefs[1, "Estimate"] + expectancy.coefs[2, "Estimate"])
-reverse.logodds(expectancy.coefs[1, "Estimate"] + confint(expectancy.freq)[2,])
-
-# strategy
-reverse.logodds(expectancy.coefs[1, "Estimate"] + expectancy.coefs[3, "Estimate"])
-reverse.logodds(expectancy.coefs[1, "Estimate"] + confint(expectancy.freq)[3,])
-
-
-## Success
-
-# aptitude
-reverse.logodds(expectancy.coefs[1, "Estimate"]+expectancy.coefs[4, "Estimate"])
-reverse.logodds(confint(expectancy.freq)[1,]+expectancy.coefs[4, "Estimate"])
-
-# effort
-reverse.logodds(expectancy.coefs[1, "Estimate"] + expectancy.coefs[2, "Estimate"]+expectancy.coefs[4, "Estimate"]+ expectancy.coefs[5, "Estimate"])
-reverse.logodds(expectancy.coefs[1, "Estimate"]+expectancy.coefs[4, "Estimate"] + confint(expectancy.freq)[2,]+ expectancy.coefs[5, "Estimate"])
-
-# strategy
-reverse.logodds(expectancy.coefs[1, "Estimate"] + expectancy.coefs[3, "Estimate"]+expectancy.coefs[4, "Estimate"]+ expectancy.coefs[6, "Estimate"])
-reverse.logodds(expectancy.coefs[1, "Estimate"]+expectancy.coefs[4, "Estimate"] + confint(expectancy.freq)[3,]+ expectancy.coefs[6, "Estimate"])
-
-```
-
-
+### Converted Estimates (to probability)
 
 ```{r}
 
+mandatory.coefs <- summary(mandatory.model)$coefficients
 
+mandatory.summary <- data.frame(
+  advice = rep("Mandatory",3),
+  attribution = c("Effort", "Strategy","Aptitude"),
+  mean = c(reverse.logodds(mandatory.coefs[1, "Estimate"]), reverse.logodds(mandatory.coefs[1, "Estimate"] + mandatory.coefs[2, "Estimate"]), reverse.logodds(mandatory.coefs[1, "Estimate"] + mandatory.coefs[3, "Estimate"])),
+  lower = c(reverse.logodds(confint(mandatory.model)[1,])[1], reverse.logodds(mandatory.coefs[1, "Estimate"] + confint(mandatory.model)[2,])[1], reverse.logodds(mandatory.coefs[1, "Estimate"] + confint(mandatory.model)[3,])[1]),
+  upper = c(reverse.logodds(confint(mandatory.model)[1,])[2], reverse.logodds(mandatory.coefs[1, "Estimate"] + confint(mandatory.model)[2,])[2], reverse.logodds(mandatory.coefs[1, "Estimate"] + confint(mandatory.model)[3,])[2])
+)
 
+coef.summary <- rbind(coef.summary,mandatory.summary)
 
-summary(betareg(expectancy ~ attribution*valence, data = attobo2, link = "logit" ))
-
-Anova(glm2(method ~ attribution_strat*valence, data = attobo2, family = binomial(link = "logit")))
-
-Anova(glm2(bruteforce ~ attribution_effort*valence, data = attobo2, family = binomial(link = "logit")))
-
-Anova(glm2(redo ~ attribution_effort*valence, data = attobo2, family = binomial(link = "logit")))
-
-Anova(betareg(expectancy ~ attribution*valence, data = attobo2, link = "logit" ))
+colnames(mandatory.summary) <- c("Advice", "Attribution", "Mean", "Lower", "Upper")
+mandatory.summary
 
 ```
 
+
+## Self-directed Study Methods {.tabset}
+
+### Model and Hypothesis test
+
+```{r}
+
+attobo$selfdirected_bool <- ifelse(attobo$selfdirected > 0, 1, 0)
+
+selfdirected.model<- glm2(selfdirected_bool ~ attribution_strat, data = attobo, family = binomial(link = "logit"))
+
+summary(selfdirected.model)
+confint(selfdirected.model)
+Anova(selfdirected.model)
+
+# compute effect size
+model.anova <- car::Anova(selfdirected.model)
+cohen.w <- sqrt(model.anova$`LR Chisq`[1]/(1*nrow(attobo)))
+print(paste("Cohen W:", round(cohen.w,3) ))
+
+```
+### Converted Estimates (to probability)
+
+```{r}
+selfdirected.coefs <- summary(selfdirected.model)$coefficients
+
+selfdirected.summary <- data.frame(
+  advice = rep("Self-Directed",3),
+  attribution = c("Strategy", "Effort","Aptitude"),
+  mean = c(reverse.logodds(selfdirected.coefs[1, "Estimate"]), reverse.logodds(selfdirected.coefs[1, "Estimate"] + selfdirected.coefs[2, "Estimate"]), reverse.logodds(selfdirected.coefs[1, "Estimate"] + selfdirected.coefs[3, "Estimate"])),
+  lower = c(reverse.logodds(confint(selfdirected.model)[1,])[1], reverse.logodds(selfdirected.coefs[1, "Estimate"] + confint(selfdirected.model)[2,])[1], reverse.logodds(selfdirected.coefs[1, "Estimate"] + confint(selfdirected.model)[3,])[1]),
+  upper = c(reverse.logodds(confint(selfdirected.model)[1,])[2], reverse.logodds(selfdirected.coefs[1, "Estimate"] + confint(selfdirected.model)[2,])[2], reverse.logodds(selfdirected.coefs[1, "Estimate"] + confint(selfdirected.model)[3,])[2])
+)
+
+coef.summary <- rbind(coef.summary, selfdirected.summary)
+
+colnames(selfdirected.summary) <- c("Advice", "Attribution", "Mean", "Lower", "Upper")
+selfdirected.summary
+
+```
+
+## Expectancy {.tabset}
+
+### Model and Hypothesis test
+
+```{r}
+
+expectancy.model<- betareg(expectancy ~ attribution, data = attobo, link = "logit" )
+
+summary(expectancy.model)
+confint(expectancy.model)
+Anova(expectancy.model)
+
+```
+
+### Converted Estimates (to probability)
+
+```{r}
+expectancy.coefs <- summary(expectancy.model)$coefficients$mean
+
+expectancy.summary <- data.frame(
+  attribution = c("Effort", "Strategy","Aptitude"),
+  mean = c(reverse.logodds(expectancy.coefs[1, "Estimate"] + expectancy.coefs[2, "Estimate"]), reverse.logodds(expectancy.coefs[1, "Estimate"] + expectancy.coefs[3, "Estimate"]), reverse.logodds(expectancy.coefs[1, "Estimate"])),
+  lower = c(reverse.logodds(expectancy.coefs[1, "Estimate"] + confint(expectancy.model)[2,])[1], reverse.logodds(expectancy.coefs[1, "Estimate"] + confint(expectancy.model)[3,])[1], reverse.logodds(confint(expectancy.model)[1,])[1]),
+  upper = c(reverse.logodds(expectancy.coefs[1, "Estimate"] + confint(expectancy.model)[2,])[2], reverse.logodds(expectancy.coefs[1, "Estimate"] + confint(expectancy.model)[3,])[2], reverse.logodds(confint(expectancy.model)[1,])[2])
+)
+colnames(expectancy.summary) <- c("Attribution", "Mean", "Lower", "Upper")
+expectancy.summary
+```
+
+
+
+## Rely-on-others Study Advice (Exploratory) {.tabset}
+
+```{r}
+attobo$seekhelp_bool <- ifelse(attobo$seekhelp > 0, 1, 0)
+
+seekhelp.model<- glm2(seekhelp_bool ~ attribution, data = attobo, family = binomial(link = "logit"))
+
+summary(seekhelp.model)
+confint(seekhelp.model)
+Anova(seekhelp.model)
+
+# compute effect size
+model.anova <- car::Anova(seekhelp.model)
+cohen.w <- sqrt(model.anova$`LR Chisq`[1]/(1*nrow(attobo)))
+print(paste("Cohen W:", round(cohen.w,3) ))
+
+```
+
+### Converted Estimates (to probability)
+
+```{r}
+
+seekhelp.coefs <- summary(seekhelp.model)$coefficients
+
+seekhelp.summary <- data.frame(
+  advice = rep("Rely on others Study Advice",3),
+  attribution = c("Aptitude", "Effort", "Strategy"),
+  mean = c(reverse.logodds(seekhelp.coefs[1, "Estimate"]), reverse.logodds(seekhelp.coefs[1, "Estimate"] + seekhelp.coefs[2, "Estimate"]), reverse.logodds(seekhelp.coefs[1, "Estimate"] + seekhelp.coefs[3, "Estimate"])),
+  lower = c(reverse.logodds(confint(seekhelp.model)[1,])[1], reverse.logodds(seekhelp.coefs[1, "Estimate"] + confint(seekhelp.model)[2,])[1], reverse.logodds(seekhelp.coefs[1, "Estimate"] + confint(seekhelp.model)[3,])[1]),
+  upper = c(reverse.logodds(confint(seekhelp.model)[1,])[2], reverse.logodds(seekhelp.coefs[1, "Estimate"] + confint(seekhelp.model)[2,])[2], reverse.logodds(seekhelp.coefs[1, "Estimate"] + confint(seekhelp.model)[3,])[2])
+)
+
+colnames(seekhelp.summary) <- c("Advice", "Attribution", "Mean", "Lower", "Upper")
+seekhelp.summary
+
+```
 
 # Graphs
 
 ```{r}
 
 
-coef.summary$Advice <- factor(coef.summary$advice, levels = c("Work Harder", "Methodological","Try Again"))
+coef.summary$Advice <- factor(coef.summary$advice, levels = c("Work Harder", "Mandatory", "Self-Directed"))
 
-coef.summary$Attribution <- factor(coef.summary$attribution, levels = c("Effort", "Strategy", "Aptitude"))
+coef.summary$Attribution <- factor(coef.summary$attribution, levels = c( "Effort", "Strategy", "Aptitude" ))
 
-
-```
-
-```{r eval = F}
-
-attobo2.advice.full.plot <-  ggplot(coef.summary, aes(x = Attribution, y = mean, shape = Advice)) + 
-  geom_errorbar( aes(ymin=lower, ymax=upper), width=.2,
-                 position=position_dodge(.4)) +
-  geom_point(aes(col = Advice), position=position_dodge(.4), size = 4) +
-  scale_color_manual(values = c("#D55E00", "#0072B2", "#E69F00")) +
-  scale_shape_manual(values = c(16,17,18))+
-  ylab("Probability of Advice") + xlab("") + 
-  facet_wrap(~`Outcome Valence`)+
-  theme_bw() +
-  theme(text = element_text(size = 16),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank())
-
-
-attobo2.advice.full.plot
-
+colnames(coef.summary) <- c("Advice", "Attribution", "Mean", "Lower", "Upper")
+coef.summary
 ```
 
 ```{r}
 
-attobo2.advice.full.plot <-  ggplot(coef.summary, aes(x = Attribution, y = mean, shape = Advice)) + 
-  geom_errorbar( aes(ymin=lower, ymax=upper), width=.2,
-                 position=position_dodge(.4)) +
-  geom_point(aes(col = Advice), position=position_dodge(.4), size = 4) +
-  scale_color_manual(values = c("#D55E00", "#0072B2", "#E69F00")) +
-  scale_shape_manual(values = c(16,17,18))+
+
+attobo1.advice.plot <-  ggplot(coef.summary, aes(x = Attribution, y = Mean, shape = Advice)) + 
+  geom_errorbar(aes(ymin=Lower, ymax=Upper), width=.2,
+                 position=position_dodge(.5))+
+  geom_point(aes(col = Advice), position=position_dodge(.5), size = 3) +
+  scale_color_manual(values = c("#D55E00", "#009E73", "#0072B2")) +
+  scale_shape_manual(values = c(16 , 15,17)) +
   ylab("Probability of Advice") + xlab("") + 
   theme_bw() +
-  theme(text = element_text(size = 16),
+  theme(text = element_text(size = 18),
         panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank())
+        panel.grid.minor = element_blank()) 
 
-
-attobo2.advice.full.plot
-
+attobo1.advice.plot
 ```
+
+
 
 
 

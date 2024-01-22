@@ -1,13 +1,15 @@
 ---
 title: "Pre-test Analysis"
-output:
+output: 
   html_document:
-    theme: readable
+    theme: darkly
     toc: yes
     toc_depth: 3
     toc_float: true
     highlight: tango
     df_print: paged
+    fig_caption: false
+    code_fold: hide
 fontsize: 18pt
 ---
 
@@ -15,7 +17,7 @@ fontsize: 18pt
 knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE)
 ```
 
-```{r echo=FALSE, results='hide'}
+```{r echo=FALSE, results='hide', message=F, warning=F}
 
 library(psych)
 library(ggplot2)
@@ -33,25 +35,22 @@ library(car)
 library(olsrr)
 library(dthelper)
 
-load("attobo.pilot.RData")
-
+report <- function(x,dp=2){
+  m <- round(mean(x, na.rm=T),dp)
+  s <- round(sd(x, na.rm=T),dp)
+  return(paste0(m, " (", s, ")"))
+}
 ```
 
-```{r}
+```{r loading and wrangling data}
+load("attobo.pilot.RData")
 
-
+# fixing age variable
 attobo.pilot$Age[attobo.pilot$Age == 1943] <- 75
 attobo.pilot$Age[attobo.pilot$Age == 1984] <- 34
 attobo.pilot$Age[attobo.pilot$Age == 1987] <- 31
 attobo.pilot$Age[attobo.pilot$Age == 1988] <- 32
 attobo.pilot$Age[attobo.pilot$Age == 1992] <- 26
-
-summary(attobo.pilot$Age)
-
-sd(attobo.pilot$Age, na.rm = T)
-
-summary(factor(attobo.pilot$Gender))
-
 
 ```
 
@@ -61,29 +60,14 @@ summary(factor(attobo.pilot$Gender))
 
 ```{r }
 
-attobo.pilot %>%
-  summarise(AptOutMean = mean(AptOut, na.rm = T),
-            EffortOutMean = mean(EffortOut, na.rm = T),
-            StratOutMean = mean(StratOut, na.rm = T),
-            AptOutSD = sd(AptOut, na.rm = T),
-            EffortOutSD = sd(EffortOut, na.rm = T),
-            StratOutSD = sd(StratOut, na.rm = T))
+summary_stats <- data.frame(
+  Attribution = c("Effort", "Strategy", "Aptitude"),
+  `Locus (External)` = c(report(attobo.pilot$EffortOut), report(attobo.pilot$StratOut), report(attobo.pilot$AptOut) ),
+  `Unstability` = c(report(attobo.pilot$EffortVar), report(attobo.pilot$StratVar), report(attobo.pilot$AptVar) ),
+  `Uncontrollability` = c(report(attobo.pilot$EffortUncon), report(attobo.pilot$StratUncon), report(attobo.pilot$AptUncon) )
+                  )
 
-attobo.pilot %>%
-  summarise(AptVarMean = mean(AptVar, na.rm = T),
-            EffortVarMean = mean(EffortVar, na.rm = T),
-            StratVarMean = mean(StratVar, na.rm = T),
-            AptVarSD = sd(AptVar, na.rm = T),
-            EffortVarSD = sd(EffortVar, na.rm = T),
-            StratVarSD = sd(StratVar, na.rm = T))
-
-attobo.pilot %>%
-  summarise(AptUnconMean = mean(AptUncon, na.rm = T),
-            EffortUnconMean = mean(EffortUncon, na.rm = T),
-            StratUnconMean = mean(StratUncon, na.rm = T),
-            AptUnconSD = sd(AptUncon, na.rm = T),
-            EffortUnconSD = sd(EffortUncon, na.rm = T),
-            StratUnconSD = sd(StratUncon, na.rm = T))
+summary_stats
 
 attobo.dimensions <- attobo.pilot[, 2:19]
 
@@ -91,17 +75,16 @@ ggplot(data = gather(attobo.dimensions , factor_key = TRUE), aes(x = factor(valu
   geom_bar() + 
   facet_wrap(~ key,scales = "free", as.table = TRUE, nrow = 3) + xlab("") + 
   theme_bw()
-
-
 ```
+
 
 ###################################################################
 
 # Attribution Patterns
 
-## Locus
+## Locus of Control (External)
 
-### Frequentist Estimates
+### Hypothesis test
 
 ```{r}
 
@@ -111,5 +94,32 @@ t.test(attobo.pilot$StratOut, attobo.pilot$AptOut,paired = TRUE)
 
 t.test(attobo.pilot$StratOut, attobo.pilot$EffortOut, paired = TRUE)
 
+```
+
+## Stability (higher means more unstable)
+
+### Hypothesis test
+
+```{r}
+
+t.test(attobo.pilot$EffortVar, attobo.pilot$AptVar, paired = TRUE)
+
+t.test(attobo.pilot$StratVar, attobo.pilot$AptVar,paired = TRUE)
+
+t.test(attobo.pilot$StratVar, attobo.pilot$EffortVar, paired = TRUE)
+
+```
+
+## Controllability (higher means more uncontrollable)
+
+### Hypothesis test
+
+```{r}
+
+t.test(attobo.pilot$EffortUncon, attobo.pilot$AptUncon, paired = TRUE)
+
+t.test(attobo.pilot$StratUncon, attobo.pilot$AptUncon,paired = TRUE)
+
+t.test(attobo.pilot$StratUncon, attobo.pilot$EffortUncon, paired = TRUE)
 
 ```

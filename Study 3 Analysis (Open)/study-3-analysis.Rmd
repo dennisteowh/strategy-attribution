@@ -1,16 +1,22 @@
 ---
 title: "Study 3 Analysis"
-output:   
+author: "Dennis W.H. Teo"
+output: 
   html_document:
-    toc: true
+    theme: darkly
+    toc: yes
     toc_depth: 3
-    number_sections: true
-    theme: united
+    toc_float: true
+    highlight: tango
+    df_print: paged
+    fig_caption: false
+    code_fold: hide
+fontsize: 18pt
 ---
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 
-knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, message = FALSE)
 
 ```
 
@@ -28,10 +34,18 @@ library(nnet)
 
 ```
 
-
 # Descriptive Stats
 
+## Sample Breakdown
+
+Total number of participants: `r nrow(attobo3)`
+
+## Histograms of Collected Measures
+
 ```{r }
+
+attobo3.demo <- attobo3 %>%
+  select(Gender, Race, Age, Education)
 
 attobo3.advice <- attobo3 %>%
   select(StratAcad, EffortAcad, StratSports, EffortSports,
@@ -44,13 +58,6 @@ attobo3.attribution <- attobo3 %>%
          Effort.Variable, Strat.Variable,
          Effort.Others.Uncon, Strat.Others.Uncon,
          Effort.Personal.Uncon, Strat.Personal.Uncon)
-
-summary(attobo3.attribution)
-
-attobo3.demo <- attobo3 %>%
-  select(Gender, Race, Age, Education)
-
-summary(attobo3.demo)
 
 ggplot(data = gather(attobo3.advice, factor_key = TRUE), aes(x = factor(value))) +
   geom_bar() + 
@@ -70,14 +77,14 @@ ggplot(data = gather(attobo3.demo, factor_key = TRUE), aes(x = factor(value))) +
 
 ```
 
+# Main Analysis
 
-
-# Academic Scenario Analysis
-
-## Preparing Data
+## Academic Scenario Analysis
 
 ```{r }
-acad.long <- gather.keep(attobo3, keep = c("X1"), 
+
+## Preparing Data
+acad.long <- gather.keep(attobo3, keep = c("...1"), 
                             var.to.gather = c("StratAcad", "EffortAcad"),
                             key = "attribution",
                             value = "advice"
@@ -95,8 +102,6 @@ acad.long$attribution <- factor(acad.long$attribution,
 
 
 ```
-
-## Multinomial Model
 
 ```{r eval = F}
 
@@ -123,43 +128,23 @@ for (i in 1:nSims){
   
   df.boot <- df[resample(1:(N), N), ]
 
-test.boot <- multinom(choices ~ attribution, data = df.boot)
-summary(test.boot)
-
-newpred <- data.frame(attribution = c("effort","strategy"))
-pred <- predict(test.boot, newdata = newpred, "prob")
-
-
-boot.method.eff[i] <- pred[1,1]
-boot.method.strat[i] <- pred[2,1]
-boot.bf.eff[i] <- pred[1,2]
-boot.bf.strat[i] <- pred[2,2]
-boot.default.eff[i] <- pred[1,3]
-boot.default.strat[i] <- pred[2,3]
-boot.giveup.eff[i] <- pred[1,4]
-boot.giveup.strat[i] <- pred[2,4]
+  test.boot <- multinom(choices ~ attribution, data = df.boot, trace = F)
+  summary(test.boot)
+  
+  newpred <- data.frame(attribution = c("effort","strategy"))
+  pred <- predict(test.boot, newdata = newpred, "prob")
+  
+  
+  boot.method.eff[i] <- pred[1,1]
+  boot.method.strat[i] <- pred[2,1]
+  boot.bf.eff[i] <- pred[1,2]
+  boot.bf.strat[i] <- pred[2,2]
+  boot.default.eff[i] <- pred[1,3]
+  boot.default.strat[i] <- pred[2,3]
+  boot.giveup.eff[i] <- pred[1,4]
+  boot.giveup.strat[i] <- pred[2,4]
 
 }
-
-mean(boot.method.eff)
-quantile(boot.method.eff, c(.025,.5, .975))
-mean(boot.method.strat)
-quantile(boot.method.strat, c(.025,.5, .975))
-
-mean(boot.bf.eff)
-quantile(boot.bf.eff, c(.025,.5, .975))
-mean(boot.bf.strat)
-quantile(boot.bf.strat, c(.025,.5, .975))
-
-mean(boot.default.eff)
-quantile(boot.default.eff, c(.025,.5, .975))
-mean(boot.default.strat)
-quantile(boot.default.strat, c(.025,.5, .975))
-
-mean(boot.giveup.eff)
-quantile(boot.giveup.eff, c(.025,.5, .975))
-mean(boot.giveup.strat)
-quantile(boot.giveup.strat, c(.025,.5, .975))
 
 acad.boot <- data.frame(
   boot.method.eff = boot.method.eff,
@@ -200,18 +185,22 @@ acad.summary <- data.frame(
                  )
 )
 
-#save(acad.boot, file = "acad.boot.RData")
-#save(acad.summary, file = "acad.summary.RData")
+```
+
+```{r cache = T}
+acad.summary
 ```
 
 
 
-# Dieting Scenario Analysis
 
-## Preparing Data
+## Dieting Scenario Analysis
+
 
 ```{r }
-diet.long <- gather.keep(attobo3, keep = c("X1"), 
+
+## Preparing Data
+diet.long <- gather.keep(attobo3, keep = c("...1"), 
                             var.to.gather = c("StratDiet", "EffortDiet"),
                             key = "attribution",
                             value = "advice"
@@ -230,7 +219,6 @@ diet.long$attribution <- factor(diet.long$attribution,
 
 ```
 
-## Multinomial Model
 
 ```{r eval = F}
 
@@ -257,43 +245,23 @@ for (i in 1:nSims){
   
   df.boot <- df[resample(1:(N), N), ]
 
-test.boot <- multinom(choices ~ attribution, data = df.boot)
-summary(test.boot)
-
-newpred <- data.frame(attribution = c("effort","strategy"))
-pred <- predict(test.boot, newdata = newpred, "prob")
-
-
-boot.method.eff[i] <- pred[1,1]
-boot.method.strat[i] <- pred[2,1]
-boot.bf.eff[i] <- pred[1,2]
-boot.bf.strat[i] <- pred[2,2]
-boot.default.eff[i] <- pred[1,3]
-boot.default.strat[i] <- pred[2,3]
-boot.giveup.eff[i] <- pred[1,4]
-boot.giveup.strat[i] <- pred[2,4]
+  test.boot <- multinom(choices ~ attribution, data = df.boot, trace = F)
+  summary(test.boot)
+  
+  newpred <- data.frame(attribution = c("effort","strategy"))
+  pred <- predict(test.boot, newdata = newpred, "prob")
+  
+  
+  boot.method.eff[i] <- pred[1,1]
+  boot.method.strat[i] <- pred[2,1]
+  boot.bf.eff[i] <- pred[1,2]
+  boot.bf.strat[i] <- pred[2,2]
+  boot.default.eff[i] <- pred[1,3]
+  boot.default.strat[i] <- pred[2,3]
+  boot.giveup.eff[i] <- pred[1,4]
+  boot.giveup.strat[i] <- pred[2,4]
 
 }
-
-mean(boot.method.eff)
-quantile(boot.method.eff, c(.025,.5, .975))
-mean(boot.method.strat)
-quantile(boot.method.strat, c(.025,.5, .975))
-
-mean(boot.bf.eff)
-quantile(boot.bf.eff, c(.025,.5, .975))
-mean(boot.bf.strat)
-quantile(boot.bf.strat, c(.025,.5, .975))
-
-mean(boot.default.eff)
-quantile(boot.default.eff, c(.025,.5, .975))
-mean(boot.default.strat)
-quantile(boot.default.strat, c(.025,.5, .975))
-
-mean(boot.giveup.eff)
-quantile(boot.giveup.eff, c(.025,.5, .975))
-mean(boot.giveup.strat)
-quantile(boot.giveup.strat, c(.025,.5, .975))
 
 diet.boot <- data.frame(
   boot.method.eff = boot.method.eff,
@@ -334,18 +302,18 @@ diet.summary <- data.frame(
                  )
 )
 
-# save(diet.boot, file = "diet.boot.RData")
-# save(diet.summary, file = "diet.summary.RData")
+```
+
+```{r cache = T}
+diet.summary
 ```
 
 
-
-# Parenting Scenario Analysis
-
-## Preparing Data
+## Parenting Scenario Analysis
 
 ```{r }
-parent.long <- gather.keep(attobo3, keep = c("X1"), 
+## Preparing Data
+parent.long <- gather.keep(attobo3, keep = c("...1"), 
                             var.to.gather = c("StratParent", "EffortParent"),
                             key = "attribution",
                             value = "advice"
@@ -363,8 +331,6 @@ parent.long$attribution <- factor(parent.long$attribution,
 
 
 ```
-
-## Multinomial Model
 
 ```{r eval = F}
 
@@ -391,43 +357,23 @@ for (i in 1:nSims){
   
   df.boot <- df[resample(1:(N), N), ]
 
-test.boot <- multinom(choices ~ attribution, data = df.boot)
-summary(test.boot)
-
-newpred <- data.frame(attribution = c("effort","strategy"))
-pred <- predict(test.boot, newdata = newpred, "prob")
-
-
-boot.method.eff[i] <- pred[1,1]
-boot.method.strat[i] <- pred[2,1]
-boot.bf.eff[i] <- pred[1,2]
-boot.bf.strat[i] <- pred[2,2]
-boot.default.eff[i] <- pred[1,3]
-boot.default.strat[i] <- pred[2,3]
-boot.giveup.eff[i] <- pred[1,4]
-boot.giveup.strat[i] <- pred[2,4]
+  test.boot <- multinom(choices ~ attribution, data = df.boot, trace = F)
+  summary(test.boot)
+  
+  newpred <- data.frame(attribution = c("effort","strategy"))
+  pred <- predict(test.boot, newdata = newpred, "prob")
+  
+  
+  boot.method.eff[i] <- pred[1,1]
+  boot.method.strat[i] <- pred[2,1]
+  boot.bf.eff[i] <- pred[1,2]
+  boot.bf.strat[i] <- pred[2,2]
+  boot.default.eff[i] <- pred[1,3]
+  boot.default.strat[i] <- pred[2,3]
+  boot.giveup.eff[i] <- pred[1,4]
+  boot.giveup.strat[i] <- pred[2,4]
 
 }
-
-mean(boot.method.eff)
-quantile(boot.method.eff, c(.025,.5, .975))
-mean(boot.method.strat)
-quantile(boot.method.strat, c(.025,.5, .975))
-
-mean(boot.bf.eff)
-quantile(boot.bf.eff, c(.025,.5, .975))
-mean(boot.bf.strat)
-quantile(boot.bf.strat, c(.025,.5, .975))
-
-mean(boot.default.eff)
-quantile(boot.default.eff, c(.025,.5, .975))
-mean(boot.default.strat)
-quantile(boot.default.strat, c(.025,.5, .975))
-
-mean(boot.giveup.eff)
-quantile(boot.giveup.eff, c(.025,.5, .975))
-mean(boot.giveup.strat)
-quantile(boot.giveup.strat, c(.025,.5, .975))
 
 parent.boot <- data.frame(
   boot.method.eff = boot.method.eff,
@@ -468,16 +414,18 @@ parent.summary <- data.frame(
                  )
 )
 
-# save(parent.boot, file = "parent.boot.RData")
-# save(parent.summary, file = "parent.summary.RData")
 ```
 
-# Relationship Scenario Analysis
+```{r cache = T}
+parent.summary
+```
 
-## Preparing Data
+
+## Relationship Scenario Analysis
 
 ```{r }
-relation.long <- gather.keep(attobo3, keep = c("X1"), 
+## Preparing Data
+relation.long <- gather.keep(attobo3, keep = c("...1"), 
                             var.to.gather = c("StratRelation", "EffortRelation"),
                             key = "attribution",
                             value = "advice"
@@ -495,8 +443,6 @@ relation.long$attribution <- factor(relation.long$attribution,
 
 
 ```
-
-## Multinomial Model
 
 ```{r eval = F}
 
@@ -523,43 +469,23 @@ for (i in 1:nSims){
   
   df.boot <- df[resample(1:(N), N), ]
 
-test.boot <- multinom(choices ~ attribution, data = df.boot)
-summary(test.boot)
-
-newpred <- data.frame(attribution = c("effort","strategy"))
-pred <- predict(test.boot, newdata = newpred, "prob")
-
-
-boot.method.eff[i] <- pred[1,1]
-boot.method.strat[i] <- pred[2,1]
-boot.bf.eff[i] <- pred[1,2]
-boot.bf.strat[i] <- pred[2,2]
-boot.default.eff[i] <- pred[1,3]
-boot.default.strat[i] <- pred[2,3]
-boot.giveup.eff[i] <- pred[1,4]
-boot.giveup.strat[i] <- pred[2,4]
+  test.boot <- multinom(choices ~ attribution, data = df.boot, trace = F)
+  summary(test.boot)
+  
+  newpred <- data.frame(attribution = c("effort","strategy"))
+  pred <- predict(test.boot, newdata = newpred, "prob")
+  
+  
+  boot.method.eff[i] <- pred[1,1]
+  boot.method.strat[i] <- pred[2,1]
+  boot.bf.eff[i] <- pred[1,2]
+  boot.bf.strat[i] <- pred[2,2]
+  boot.default.eff[i] <- pred[1,3]
+  boot.default.strat[i] <- pred[2,3]
+  boot.giveup.eff[i] <- pred[1,4]
+  boot.giveup.strat[i] <- pred[2,4]
 
 }
-
-mean(boot.method.eff)
-quantile(boot.method.eff, c(.025,.5, .975))
-mean(boot.method.strat)
-quantile(boot.method.strat, c(.025,.5, .975))
-
-mean(boot.bf.eff)
-quantile(boot.bf.eff, c(.025,.5, .975))
-mean(boot.bf.strat)
-quantile(boot.bf.strat, c(.025,.5, .975))
-
-mean(boot.default.eff)
-quantile(boot.default.eff, c(.025,.5, .975))
-mean(boot.default.strat)
-quantile(boot.default.strat, c(.025,.5, .975))
-
-mean(boot.giveup.eff)
-quantile(boot.giveup.eff, c(.025,.5, .975))
-mean(boot.giveup.strat)
-quantile(boot.giveup.strat, c(.025,.5, .975))
 
 relation.boot <- data.frame(
   boot.method.eff = boot.method.eff,
@@ -600,16 +526,17 @@ relation.summary <- data.frame(
                  )
 )
 
-# save(relation.boot, file = "relation.boot.RData")
-# save(relation.summary, file = "relation.summary.RData")
 ```
 
-# Sales Scenario Analysis
+```{r cache = T}
+relation.summary
+```
 
-## Preparing Data
+## Sales Scenario Analysis
 
 ```{r }
-sales.long <- gather.keep(attobo3, keep = c("X1"), 
+## Preparing Data
+sales.long <- gather.keep(attobo3, keep = c("...1"), 
                             var.to.gather = c("StratSales", "EffortSales"),
                             key = "attribution",
                             value = "advice"
@@ -627,8 +554,6 @@ sales.long$attribution <- factor(sales.long$attribution,
 
 
 ```
-
-## Multinomial Model
 
 ```{r eval = F}
 
@@ -655,43 +580,23 @@ for (i in 1:nSims){
   
   df.boot <- df[resample(1:(N), N), ]
 
-test.boot <- multinom(choices ~ attribution, data = df.boot)
-summary(test.boot)
-
-newpred <- data.frame(attribution = c("effort","strategy"))
-pred <- predict(test.boot, newdata = newpred, "prob")
-
-
-boot.method.eff[i] <- pred[1,1]
-boot.method.strat[i] <- pred[2,1]
-boot.bf.eff[i] <- pred[1,2]
-boot.bf.strat[i] <- pred[2,2]
-boot.default.eff[i] <- pred[1,3]
-boot.default.strat[i] <- pred[2,3]
-boot.giveup.eff[i] <- pred[1,4]
-boot.giveup.strat[i] <- pred[2,4]
+  test.boot <- multinom(choices ~ attribution, data = df.boot, trace = F)
+  summary(test.boot)
+  
+  newpred <- data.frame(attribution = c("effort","strategy"))
+  pred <- predict(test.boot, newdata = newpred, "prob")
+  
+  
+  boot.method.eff[i] <- pred[1,1]
+  boot.method.strat[i] <- pred[2,1]
+  boot.bf.eff[i] <- pred[1,2]
+  boot.bf.strat[i] <- pred[2,2]
+  boot.default.eff[i] <- pred[1,3]
+  boot.default.strat[i] <- pred[2,3]
+  boot.giveup.eff[i] <- pred[1,4]
+  boot.giveup.strat[i] <- pred[2,4]
 
 }
-
-mean(boot.method.eff)
-quantile(boot.method.eff, c(.025,.5, .975))
-mean(boot.method.strat)
-quantile(boot.method.strat, c(.025,.5, .975))
-
-mean(boot.bf.eff)
-quantile(boot.bf.eff, c(.025,.5, .975))
-mean(boot.bf.strat)
-quantile(boot.bf.strat, c(.025,.5, .975))
-
-mean(boot.default.eff)
-quantile(boot.default.eff, c(.025,.5, .975))
-mean(boot.default.strat)
-quantile(boot.default.strat, c(.025,.5, .975))
-
-mean(boot.giveup.eff)
-quantile(boot.giveup.eff, c(.025,.5, .975))
-mean(boot.giveup.strat)
-quantile(boot.giveup.strat, c(.025,.5, .975))
 
 sales.boot <- data.frame(
   boot.method.eff = boot.method.eff,
@@ -732,16 +637,17 @@ sales.summary <- data.frame(
                  )
 )
 
-#save(sales.boot, file = "sales.boot.RData")
-#save(sales.summary, file = "sales.summary.RData")
 ```
 
-# Sports Scenario Analysis
+```{r cache = T}
+sales.summary
+```
 
-## Preparing Data
+## Sports Scenario Analysis
 
 ```{r }
-sports.long <- gather.keep(attobo3, keep = c("X1"), 
+## Preparing Data
+sports.long <- gather.keep(attobo3, keep = c("...1"), 
                             var.to.gather = c("StratSports", "EffortSports"),
                             key = "attribution",
                             value = "advice"
@@ -759,8 +665,6 @@ sports.long$attribution <- factor(sports.long$attribution,
 
 
 ```
-
-## Multinomial Model
 
 ```{r eval = F}
 
@@ -787,43 +691,23 @@ for (i in 1:nSims){
   
   df.boot <- df[resample(1:(N), N), ]
 
-test.boot <- multinom(choices ~ attribution, data = df.boot)
-summary(test.boot)
-
-newpred <- data.frame(attribution = c("effort","strategy"))
-pred <- predict(test.boot, newdata = newpred, "prob")
-
-
-boot.method.eff[i] <- pred[1,1]
-boot.method.strat[i] <- pred[2,1]
-boot.bf.eff[i] <- pred[1,2]
-boot.bf.strat[i] <- pred[2,2]
-boot.default.eff[i] <- pred[1,3]
-boot.default.strat[i] <- pred[2,3]
-boot.giveup.eff[i] <- pred[1,4]
-boot.giveup.strat[i] <- pred[2,4]
+  test.boot <- multinom(choices ~ attribution, data = df.boot, trace = F)
+  summary(test.boot)
+  
+  newpred <- data.frame(attribution = c("effort","strategy"))
+  pred <- predict(test.boot, newdata = newpred, "prob")
+  
+  
+  boot.method.eff[i] <- pred[1,1]
+  boot.method.strat[i] <- pred[2,1]
+  boot.bf.eff[i] <- pred[1,2]
+  boot.bf.strat[i] <- pred[2,2]
+  boot.default.eff[i] <- pred[1,3]
+  boot.default.strat[i] <- pred[2,3]
+  boot.giveup.eff[i] <- pred[1,4]
+  boot.giveup.strat[i] <- pred[2,4]
 
 }
-
-mean(boot.method.eff)
-quantile(boot.method.eff, c(.025,.5, .975))
-mean(boot.method.strat)
-quantile(boot.method.strat, c(.025,.5, .975))
-
-mean(boot.bf.eff)
-quantile(boot.bf.eff, c(.025,.5, .975))
-mean(boot.bf.strat)
-quantile(boot.bf.strat, c(.025,.5, .975))
-
-mean(boot.default.eff)
-quantile(boot.default.eff, c(.025,.5, .975))
-mean(boot.default.strat)
-quantile(boot.default.strat, c(.025,.5, .975))
-
-mean(boot.giveup.eff)
-quantile(boot.giveup.eff, c(.025,.5, .975))
-mean(boot.giveup.strat)
-quantile(boot.giveup.strat, c(.025,.5, .975))
 
 sports.boot <- data.frame(
   boot.method.eff = boot.method.eff,
@@ -864,16 +748,19 @@ sports.summary <- data.frame(
                  )
 )
 
-# save(sports.boot, file = "sports.boot.RData")
-# save(sports.summary, file = "sports.summary.RData")
+
 ```
 
-# Teamwork Scenario Analysis
+```{r cache = T}
+sports.summary
+```
 
-## Preparing Data
+
+## Teamwork Scenario Analysis
 
 ```{r }
-team.long <- gather.keep(attobo3, keep = c("X1"), 
+## Preparing Data
+team.long <- gather.keep(attobo3, keep = c("...1"), 
                             var.to.gather = c("StratTeam", "EffortTeam"),
                             key = "attribution",
                             value = "advice"
@@ -891,8 +778,6 @@ team.long$attribution <- factor(team.long$attribution,
 
 
 ```
-
-## Multinomial Model
 
 ```{r eval = F}
 
@@ -919,43 +804,23 @@ for (i in 1:nSims){
   
   df.boot <- df[resample(1:(N), N), ]
 
-test.boot <- multinom(choices ~ attribution, data = df.boot)
-summary(test.boot)
-
-newpred <- data.frame(attribution = c("effort","strategy"))
-pred <- predict(test.boot, newdata = newpred, "prob")
-
-
-boot.method.eff[i] <- pred[1,1]
-boot.method.strat[i] <- pred[2,1]
-boot.bf.eff[i] <- pred[1,2]
-boot.bf.strat[i] <- pred[2,2]
-boot.default.eff[i] <- pred[1,3]
-boot.default.strat[i] <- pred[2,3]
-boot.giveup.eff[i] <- pred[1,4]
-boot.giveup.strat[i] <- pred[2,4]
+  test.boot <- multinom(choices ~ attribution, data = df.boot, trace = F)
+  summary(test.boot)
+  
+  newpred <- data.frame(attribution = c("effort","strategy"))
+  pred <- predict(test.boot, newdata = newpred, "prob")
+  
+  
+  boot.method.eff[i] <- pred[1,1]
+  boot.method.strat[i] <- pred[2,1]
+  boot.bf.eff[i] <- pred[1,2]
+  boot.bf.strat[i] <- pred[2,2]
+  boot.default.eff[i] <- pred[1,3]
+  boot.default.strat[i] <- pred[2,3]
+  boot.giveup.eff[i] <- pred[1,4]
+  boot.giveup.strat[i] <- pred[2,4]
 
 }
-
-mean(boot.method.eff)
-quantile(boot.method.eff, c(.025,.5, .975))
-mean(boot.method.strat)
-quantile(boot.method.strat, c(.025,.5, .975))
-
-mean(boot.bf.eff)
-quantile(boot.bf.eff, c(.025,.5, .975))
-mean(boot.bf.strat)
-quantile(boot.bf.strat, c(.025,.5, .975))
-
-mean(boot.default.eff)
-quantile(boot.default.eff, c(.025,.5, .975))
-mean(boot.default.strat)
-quantile(boot.default.strat, c(.025,.5, .975))
-
-mean(boot.giveup.eff)
-quantile(boot.giveup.eff, c(.025,.5, .975))
-mean(boot.giveup.strat)
-quantile(boot.giveup.strat, c(.025,.5, .975))
 
 team.boot <- data.frame(
   boot.method.eff = boot.method.eff,
@@ -996,13 +861,17 @@ team.summary <- data.frame(
                  )
 )
 
-# save(team.boot, file = "team.boot.RData")
-# save(team.summary, file = "team.summary.RData")
 ```
 
-# Effect of Context
+```{r cache = T}
+team.summary
+```
 
-```{r }
+
+## Effect of Context
+
+```{r cache=T}
+
 acad.long$context <- "Academic"
 diet.long$context <- "Diet"
 parent.long$context <- "Parent"
@@ -1031,43 +900,19 @@ df$context <- factor(df$context)
 
 context.model <- multinom(choices ~ attribution*context, data = df)
 
+# compute effect size
+model.anova <- car::Anova(context.model)
+cohen.w <- sqrt(model.anova$`LR Chisq`[1]/(1*nrow(df)))
+print(paste("Cohen W:", round(cohen.w,3) ))
+
 library(car)
 Anova(context.model)
 
 ```
 
 
-# Graph
+# Graphs
 
-
-```{r eval = F}
-
-acad.summary$context <- rep( "Academic" , 8 )
-
-diet.summary$context <- rep( "Dieting" , 8 )
-
-parent.summary$context <- rep( "Parenting" , 8 )
-
-relation.summary$context <- rep( "Relationship" , 8 )
-
-sales.summary$context <- rep( "Sales" , 8 )
-
-sports.summary$context <- rep( "Sports" , 8 )
-
-team.summary$context <- rep( "Teamwork" , 8 )
-
-
-attobo3.full.summary <- as.data.frame(rbind( acad.summary,
-                                             diet.summary,
-                                             parent.summary,
-                                             relation.summary,
-                                             sales.summary,
-                                             sports.summary,
-                                             team.summary
-                                             ))
-#save(attobo3.full.summary, file= "attobo3.full.summary.RData")
-
-```
 
 ```{r }
 
@@ -1104,6 +949,5 @@ attobo3.full.summary.plot <-  ggplot(attobo3.full.summary, aes(x = Attribution, 
         panel.grid.minor = element_blank())
 
 attobo3.full.summary.plot
-# 1600 X 2000
 
 ```

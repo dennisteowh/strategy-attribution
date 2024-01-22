@@ -1,10 +1,21 @@
 ---
-title: "power-analysis (study 1)"
-output: html_document
+title: "Power Analysis (Study 1)"
+author: "Dennis W.H. Teo"
+output: 
+  html_document:
+    theme: darkly
+    toc: yes
+    toc_depth: 3
+    toc_float: true
+    highlight: tango
+    df_print: paged
+    fig_caption: false
+    code_fold: show
+fontsize: 18pt
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
 ```
 
 ```{r}
@@ -14,64 +25,18 @@ library(car)
 library(stats4)
 library(lsr)
 library(ggplot2)
-```
 
-```{r}
-plotting.sampler(rpois(1000, .2))
-```
-
-
-## validation of generation process
-
-```{r}
-
-# generate data
-nSims <- 1000
-nPx <- 100
-
-bias.effort <- rep(NA, nSims)
-bias.aptitude <- rep(NA, nSims)
-se.effort <- rep(NA, nSims)
-se.aptitude <- rep(NA, nSims)
-
-for (i in 1:nSims){
-  
-  attribution <- sample(c("strategy","effort","aptitude"), size = nPx, replace = T) 
-  effort.dum <- ifelse(attribution == "effort", 1, 0 )
-  aptitude.dum <- ifelse(attribution == "aptitude", 1, 0 )
-  
-  advice <- log(1) + log(.5)*effort.dum + log(.5)*aptitude.dum + rnorm(nPx, sd = log(2))
-  
-  # transform to counts
-  advice.lambda <- exp(advice) 
-  # sample counts using rpois
-  advice.counts <- rpois(nPx, advice.lambda)
-  
-  # aggregate(advice.lambda~attribution, FUN=mean) # difference in .5 counts when noise = 0 
-  # aggregate(advice.counts~attribution, FUN=mean)
-  
-  model <- glm2(advice.counts ~ effort.dum + aptitude.dum, family = poisson(link = "log"))
-  model.sum <- summary(model)
-  
-  coef.effort <- model$coefficients[2]
-  coef.aptitude <- model$coefficients[3]
-  bias.effort[i] <- log(.5) - coef.effort # actual - predicted
-  bias.aptitude[i] <- log(.5) - coef.aptitude # actual - predicted
-  se.effort[i] <- model.sum$coefficients[2,2]
-  se.aptitude[i] <- model.sum$coefficients[3,2]
+reverse.logodds <- function(x){
+  exp(x)/(1+exp(x))
 }
-
-mean(bias.effort)
-mean(bias.aptitude)
-mean(se.effort)
-mean(se.aptitude)
 ```
+
 
 ## function to calculate power
 
 ```{r}
 
-est.power <- function(nPx, nSims = 5000){
+est.power <- function(nPx, nSims = 5000, target = "simple"){
   
 nSims <- 1000
 
@@ -83,20 +48,23 @@ for (i in 1:nSims){
   effort.dum <- ifelse(attribution == "effort", 1, 0 )
   aptitude.dum <- ifelse(attribution == "aptitude", 1, 0 )
   
-  advice <- log(1) + log(.5)*effort.dum + log(.5)*aptitude.dum + rnorm(nPx, sd = log(2))
+  advice <- -0.5 - 1.5*effort.dum - 1.5*aptitude.dum  + rnorm(nPx, sd = .1)
   
   # transform to counts
-  advice.lambda <- exp(advice) 
-  # sample counts using rpois
-  advice.counts <- rpois(nPx, advice.lambda)
+  advice.prob <- 1/(1+exp(-advice))
+  # sample choices using rbinom
+  advice.binary <- rbinom(nPx, size = 1, prob = advice.prob)
   
-  # aggregate(advice.lambda~attribution, FUN=mean) # difference in .5 counts when noise = 0 
-  # aggregate(advice.counts~attribution, FUN=mean)
-  
-  model <- glm2(advice.counts ~ effort.dum + aptitude.dum, family = poisson(link = "log"))
+  model <- glm2(advice.binary ~ effort.dum + aptitude.dum, family = binomial(link = "logit"))
   model.sum <- summary(model)
-  p <- model.sum$coefficients["effort.dum","Pr(>|z|)"]
+  
+  if(target == "interaction"){
+  p <- model.sum$coefficients["effort.dum:valencesuccess","Pr(>|z|)"] # p for interaction effect
   p.sig[i] <- ifelse(p < .05,1,0)
+  } else if (target == "simple"){
+  p <- model.sum$coefficients["effort.dum","Pr(>|z|)"] 
+  p.sig[i] <- ifelse(p < .05,1,0)
+  }
 
 }
 
@@ -108,15 +76,15 @@ return(power)
 
 
 ```{r}
-est.min.sample <- function(start, desired = .8, nSims = 5000, ratio = 10){
+est.min.sample <- function(start, desired = .8, nSims = 5000, ratio = 10, target = "interaction"){
   require(ggplot2)
-  power <- est.power(start, nSims = nSims)
+  power <- est.power(start, nSims = nSims, target = target)
   
   sample.track <- start
   power.track <- power
     
   iteration <- 0
-  while(power < .8) {
+  while(power < desired) {
     iteration <- iteration + ratio
     power <- est.power(start+iteration, nSims = nSims)
     
@@ -129,7 +97,7 @@ est.min.sample <- function(start, desired = .8, nSims = 5000, ratio = 10){
     stop("desired power reached on first iteration. input smaller start value to compute minimum sample required")
   }
   
-  while(power > .8){
+  while(power > desired){
     iteration <- iteration - 1
     power <- est.power(start+iteration, nSims = nSims)
     
@@ -159,7 +127,8 @@ est.min.sample <- function(start, desired = .8, nSims = 5000, ratio = 10){
 
 ```{r}
 set.seed(100)
-est.min.sample(start = 100, nSims = 5000)
+est.min.sample(start = 100, nSims = 5000, target = "simple")
+
 
 ```
 
@@ -167,9 +136,16 @@ est.min.sample(start = 100, nSims = 5000)
 
 ```{r}
 
+# install.packages("remotes")
+# remotes::install_github("markushuff/PsychHelperFunctions")
+
+set.seed(100)
+
+nPx <- 133
 nSims <- 1000
-nPx <- 129
+
 cohen.w <- rep(NA, nSims)
+# cohen.w2 <- rep(NA, nSims)
 
 for (i in 1:nSims){
   
@@ -177,26 +153,22 @@ for (i in 1:nSims){
   effort.dum <- ifelse(attribution == "effort", 1, 0 )
   aptitude.dum <- ifelse(attribution == "aptitude", 1, 0 )
   
-  advice <- log(1) + log(.5)*effort.dum + log(.5)*aptitude.dum + rnorm(nPx, sd = log(2))
+  advice <- -1 - 0.8*effort.dum - 0.8*aptitude.dum  + rnorm(nPx, sd = .1)
   
   # transform to counts
-  advice.lambda <- exp(advice) 
-  # sample counts using rpois
-  advice.counts <- rpois(nPx, advice.lambda)
+  advice.prob <- 1/(1+exp(-advice))
+  # sample choices using rbinom
+  advice.binary <- rbinom(nPx, size = 1, prob = advice.prob)
   
-  # aggregate(advice.lambda~attribution, FUN=mean) # difference in .5 counts when noise = 0 
-  # aggregate(advice.counts~attribution, FUN=mean)
-  
-  model <- glm2(advice.counts ~ effort.dum + aptitude.dum, family = poisson(link = "log"))
+  model <- glm2(advice.binary ~ attribution, family = binomial(link = "logit"))
   model.sum <- summary(model)
   model.anova <- car::Anova(model)
+  cohen.w[i] <- sqrt(model.anova$`LR Chisq`[1]/(2*nPx))
   
-  cohen.w[i] <- sqrt(model.anova$`LR Chisq`[1]/(1*nPx))
+  }
 
-}
 
+# cohen w
 mean(cohen.w)
-```
 
 ```
-
